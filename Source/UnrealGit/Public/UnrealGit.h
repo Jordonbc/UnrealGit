@@ -4,7 +4,7 @@
 
 #include "Modules/ModuleManager.h"
 
-class FUnrealGitModule : public IModuleInterface
+class FUnrealGitModule final : public IModuleInterface
 {
 public:
 

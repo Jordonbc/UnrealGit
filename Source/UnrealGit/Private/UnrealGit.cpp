@@ -2,19 +2,23 @@
 
 #include "UnrealGit.h"
 
+#include "ISourceControlModule.h"
+#include "UnrealGit/SourceControl/UnrealGitSourceControlProvider.h"
+
 #define LOCTEXT_NAMESPACE "FUnrealGitModule"
 
 void FUnrealGitModule::StartupModule()
 {
-	// This code will execute after your module is loaded into memory; the exact timing is specified in the .uplugin file per-module
-	
+	ISourceControlModule& SourceControlModule = FModuleManager::LoadModuleChecked<ISourceControlModule>("SourceControl");
+	SourceControlModule.RegisterProvider(MakeShared<FUnrealGitSourceControlProvider, ESPMode::ThreadSafe>());
 }
 
 void FUnrealGitModule::ShutdownModule()
 {
-	// This function may be called during shutdown to clean up your module.  For modules that support dynamic reloading,
-	// we call this function before unloading the module.
-	
+	if (FModuleManager::Get().IsModuleLoaded("SourceControl"))
+	{
+		ISourceControlModule::Get().UnregisterProvider("UnrealGit");
+	}
 }
 
 #undef LOCTEXT_NAMESPACE

@@ -17,8 +17,13 @@
 	"Modules": [
 		{
 			"Name": "UnrealGit",
-			"Type": "Runtime",
-			"LoadingPhase": "PreLoadingScreen"
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
+		},
+		{
+			"Name": "UnrealGitTests",
+			"Type": "DeveloperTool",
+			"LoadingPhase": "PostEngineInit"
 		}
 	]
 }
