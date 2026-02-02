@@ -2,7 +2,10 @@
 
 #pragma once
 
+#include "CoreMinimal.h"
 #include "Modules/ModuleManager.h"
+
+class FUnrealGitSourceControlProvider;
 
 class FUnrealGitModule final : public IModuleInterface
 {
@@ -11,4 +14,7 @@ public:
 	/** IModuleInterface implementation */
 	virtual void StartupModule() override;
 	virtual void ShutdownModule() override;
+
+private:
+	TUniquePtr<FUnrealGitSourceControlProvider> Provider;
 };

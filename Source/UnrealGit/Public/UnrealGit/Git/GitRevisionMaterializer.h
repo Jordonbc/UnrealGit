@@ -17,7 +17,7 @@ class IGitProcessRunner;
  * - Materialize may be called from background threads.
  * - Cleanup must be called when no revision objects will use the files anymore.
  */
-class FGitRevisionMaterializer final : public TSharedFromThis<FGitRevisionMaterializer, ESPMode::ThreadSafe>
+class UNREALGIT_API FGitRevisionMaterializer final : public TSharedFromThis<FGitRevisionMaterializer, ESPMode::ThreadSafe>
 {
 public:
 	explicit FGitRevisionMaterializer(FString InSessionRootDirectory);
@@ -69,4 +69,3 @@ private:
 	mutable FCriticalSection Lock;
 	TMap<FKey, FString> MaterializedFiles;
 };
-

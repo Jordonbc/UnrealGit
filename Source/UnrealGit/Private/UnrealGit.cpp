@@ -2,22 +2,23 @@
 
 #include "UnrealGit.h"
 
-#include "ISourceControlModule.h"
+#include "Features/IModularFeatures.h"
 #include "UnrealGit/SourceControl/UnrealGitSourceControlProvider.h"
 
 #define LOCTEXT_NAMESPACE "FUnrealGitModule"
 
 void FUnrealGitModule::StartupModule()
 {
-	ISourceControlModule& SourceControlModule = FModuleManager::LoadModuleChecked<ISourceControlModule>("SourceControl");
-	SourceControlModule.RegisterProvider(MakeShared<FUnrealGitSourceControlProvider, ESPMode::ThreadSafe>());
+	Provider = MakeUnique<FUnrealGitSourceControlProvider>();
+	IModularFeatures::Get().RegisterModularFeature(FName("SourceControl"), Provider.Get());
 }
 
 void FUnrealGitModule::ShutdownModule()
 {
-	if (FModuleManager::Get().IsModuleLoaded("SourceControl"))
+	if (Provider)
 	{
-		ISourceControlModule::Get().UnregisterProvider("UnrealGit");
+		IModularFeatures::Get().UnregisterModularFeature(FName("SourceControl"), Provider.Get());
+		Provider.Reset();
 	}
 }
 

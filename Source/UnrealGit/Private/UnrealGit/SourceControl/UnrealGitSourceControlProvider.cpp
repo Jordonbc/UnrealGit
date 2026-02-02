@@ -23,14 +23,19 @@
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitSyncWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitUnlockWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitUpdateStatusWorker.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
 #include "UnrealGit/SourceControl/UnrealGitSourceControlState.h"
 #include "UnrealGit/SourceControl/UnrealGitSourceControlRevision.h"
-#include "UObject/CoreUObjectDelegates.h"
+
+#if SOURCE_CONTROL_WITH_SLATE
+#include "Styling/AppStyle.h"
+#include "Widgets/SNullWidget.h"
+#endif // SOURCE_CONTROL_WITH_SLATE
 
 struct FUnrealGitSourceControlProvider::FCommand final
 {
 	FCommand(
-		const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe>& InOperation,
+		const FSourceControlOperationRef& InOperation,
 		const TArray<FString>& InFiles,
 		const FSourceControlOperationComplete& InDelegate,
 		TUniquePtr<IGitSourceControlWorker>&& InWorker,
@@ -45,7 +50,7 @@ struct FUnrealGitSourceControlProvider::FCommand final
 	{
 	}
 
-	TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe> Operation;
+	FSourceControlOperationRef Operation;
 	TArray<FString> Files;
 	FSourceControlOperationComplete Delegate;
 
@@ -59,17 +64,6 @@ struct FUnrealGitSourceControlProvider::FCommand final
 static bool IsOperationSynchronousOnGameThread(EConcurrency::Type Concurrency)
 {
 	return Concurrency == EConcurrency::Synchronous && IsInGameThread();
-}
-
-static FString BytesToTextUtf8Lossy(const TArray<uint8>& Bytes)
-{
-	if (Bytes.Num() == 0)
-	{
-		return FString();
-	}
-
-	FUTF8ToTCHAR Converter(reinterpret_cast<const ANSICHAR*>(Bytes.GetData()), Bytes.Num());
-	return FString(Converter.Length(), Converter.Get());
 }
 
 FUnrealGitSourceControlProvider::FUnrealGitSourceControlProvider() = default;
@@ -98,11 +92,6 @@ void FUnrealGitSourceControlProvider::Init(bool /*bForceConnection*/)
 	RevisionMaterializer = MakeShared<FGitRevisionMaterializer, ESPMode::ThreadSafe>(SessionDir);
 
 	StartEnvironmentValidation();
-
-	if (!SettingsChangedHandle.IsValid())
-	{
-		SettingsChangedHandle = FCoreUObjectDelegates::OnObjectPropertyChanged.AddSP(AsShared(), &FUnrealGitSourceControlProvider::HandleSettingsObjectChanged);
-	}
 }
 
 void FUnrealGitSourceControlProvider::Close()
@@ -120,12 +109,6 @@ void FUnrealGitSourceControlProvider::Close()
 	{
 		FScopeLock Scope(&EnvironmentLock);
 		EnvironmentInfo.Reset();
-	}
-
-	if (SettingsChangedHandle.IsValid())
-	{
-		FCoreUObjectDelegates::OnObjectPropertyChanged.Remove(SettingsChangedHandle);
-		SettingsChangedHandle.Reset();
 	}
 }
 
@@ -185,6 +168,41 @@ bool FUnrealGitSourceControlProvider::IsAvailable() const
 	return ProcessRunner.IsValid();
 }
 
+TMap<ISourceControlProvider::EStatus, FString> FUnrealGitSourceControlProvider::GetStatus() const
+{
+	TMap<EStatus, FString> Status;
+
+	Status.Add(EStatus::Enabled, TEXT("true"));
+	Status.Add(EStatus::Connected, RepoRoot.IsEmpty() ? TEXT("false") : TEXT("true"));
+	Status.Add(EStatus::Repository, RepoRoot);
+
+	{
+		FScopeLock Scope(&EnvironmentLock);
+		if (EnvironmentInfo.IsSet())
+		{
+			Status.Add(EStatus::User, EnvironmentInfo->UserName);
+			Status.Add(EStatus::Email, EnvironmentInfo->UserEmail);
+			Status.Add(EStatus::ScmVersion, EnvironmentInfo->GitVersion);
+		}
+	}
+
+	return Status;
+}
+
+bool FUnrealGitSourceControlProvider::QueryStateBranchConfig(const FString& /*ConfigSrc*/, const FString& /*ConfigDest*/)
+{
+	return false;
+}
+
+void FUnrealGitSourceControlProvider::RegisterStateBranches(const TArray<FString>& /*BranchNames*/, const FString& /*ContentRoot*/)
+{
+}
+
+int32 FUnrealGitSourceControlProvider::GetStateBranchIndex(const FString& /*BranchName*/) const
+{
+	return INDEX_NONE;
+}
+
 FSourceControlStateRef FUnrealGitSourceControlProvider::GetOrCreateStateInternal(const FString& AbsoluteFilename)
 {
 	FScopeLock Lock(&StateCacheLock);
@@ -198,47 +216,58 @@ FSourceControlStateRef FUnrealGitSourceControlProvider::GetOrCreateStateInternal
 	return NewState;
 }
 
-FSourceControlStatePtr FUnrealGitSourceControlProvider::GetState(const FString& Filename, EStateCacheUsage::Type InStateCacheUsage)
+ECommandResult::Type FUnrealGitSourceControlProvider::GetState(const TArray<FString>& InFiles, TArray<FSourceControlStateRef>& OutState, EStateCacheUsage::Type InStateCacheUsage)
 {
-	const FString Abs = FPaths::ConvertRelativePathToFull(Filename);
-	const FSourceControlStatePtr State = GetOrCreateStateInternal(Abs);
+	OutState.Reset();
+	OutState.Reserve(InFiles.Num());
 
-	// A request for fresh state must never block; schedule an async status update for the file.
-	// This keeps icon/UI queries responsive while allowing callers to force refresh.
-	if (InStateCacheUsage == EStateCacheUsage::ForceUpdate)
-	{
-		const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe> UpdateOp = ISourceControlOperation::Create<FUpdateStatus>();
-		Execute(UpdateOp, { Abs }, EConcurrency::Asynchronous, FSourceControlOperationComplete());
-	}
-
-	return State;
-}
-
-FSourceControlStatePtr FUnrealGitSourceControlProvider::GetState(const FSourceControlChangelistPtr& /*InChangelist*/, const FString& Filename)
-{
-	return GetOrCreateStateInternal(FPaths::ConvertRelativePathToFull(Filename));
-}
-
-TArray<FSourceControlStateRef> FUnrealGitSourceControlProvider::GetState(const TArray<FString>& InFiles, EStateCacheUsage::Type InStateCacheUsage)
-{
-	TArray<FSourceControlStateRef> OutStates;
-	OutStates.Reserve(InFiles.Num());
 	TArray<FString> AbsFiles;
 	AbsFiles.Reserve(InFiles.Num());
+
 	for (const FString& File : InFiles)
 	{
 		const FString Abs = FPaths::ConvertRelativePathToFull(File);
-		OutStates.Add(GetOrCreateStateInternal(Abs));
+		OutState.Add(GetOrCreateStateInternal(Abs));
 		AbsFiles.Add(Abs);
 	}
 
 	if (InStateCacheUsage == EStateCacheUsage::ForceUpdate)
 	{
-		const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe> UpdateOp = ISourceControlOperation::Create<FUpdateStatus>();
-		Execute(UpdateOp, AbsFiles, EConcurrency::Asynchronous, FSourceControlOperationComplete());
+		const FSourceControlOperationRef UpdateOp = ISourceControlOperation::Create<FUpdateStatus>();
+		Execute(UpdateOp, nullptr, AbsFiles, EConcurrency::Asynchronous, FSourceControlOperationComplete());
 	}
 
-	return OutStates;
+	return ECommandResult::Succeeded;
+}
+
+ECommandResult::Type FUnrealGitSourceControlProvider::GetState(const TArray<FSourceControlChangelistRef>& /*InChangelists*/, TArray<FSourceControlChangelistStateRef>& OutState, EStateCacheUsage::Type /*InStateCacheUsage*/)
+{
+	OutState.Reset();
+	return ECommandResult::Succeeded;
+}
+
+TArray<FSourceControlStateRef> FUnrealGitSourceControlProvider::GetCachedStateByPredicate(TFunctionRef<bool(const FSourceControlStateRef&)> Predicate) const
+{
+	TArray<FSourceControlStateRef> Results;
+	FScopeLock Lock(&StateCacheLock);
+	for (const TPair<FString, FSourceControlStateRef>& Pair : StateCache)
+	{
+		if (Predicate(Pair.Value))
+		{
+			Results.Add(Pair.Value);
+		}
+	}
+	return Results;
+}
+
+FDelegateHandle FUnrealGitSourceControlProvider::RegisterSourceControlStateChanged_Handle(const FSourceControlStateChanged::FDelegate& Delegate)
+{
+	return SourceControlStateChanged.Add(Delegate);
+}
+
+void FUnrealGitSourceControlProvider::UnregisterSourceControlStateChanged_Handle(FDelegateHandle Handle)
+{
+	SourceControlStateChanged.Remove(Handle);
 }
 
 FString FUnrealGitSourceControlProvider::GetWorkingDirectoryHint() const
@@ -246,37 +275,6 @@ FString FUnrealGitSourceControlProvider::GetWorkingDirectoryHint() const
 	return Settings.RepositoryDiscoveryDirectory.IsEmpty()
 		? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir())
 		: Settings.RepositoryDiscoveryDirectory;
-}
-
-void FUnrealGitSourceControlProvider::HandleSettingsObjectChanged(UObject* ObjectBeingModified, FPropertyChangedEvent& /*PropertyChangedEvent*/)
-{
-	if (ObjectBeingModified == nullptr)
-	{
-		return;
-	}
-
-	if (!ObjectBeingModified->IsA<UUnrealGitProjectSettings>() && !ObjectBeingModified->IsA<UUnrealGitUserSettings>())
-	{
-		return;
-	}
-
-	FText SettingsError;
-	FUnrealGitProviderSettings NewSettings;
-	if (!FUnrealGitSettingsResolver::Build(NewSettings, SettingsError))
-	{
-		LastErrorText = SettingsError;
-		return;
-	}
-
-	const bool bGitExecutableChanged = NewSettings.GitExecutable != Settings.GitExecutable;
-	Settings = MoveTemp(NewSettings);
-
-	if (bGitExecutableChanged)
-	{
-		ProcessRunner = MakeShared<FSystemGitProcessRunner, ESPMode::ThreadSafe>(Settings.GitExecutable);
-	}
-
-	StartEnvironmentValidation();
 }
 
 void FUnrealGitSourceControlProvider::StartEnvironmentValidation()
@@ -298,7 +296,7 @@ void FUnrealGitSourceControlProvider::StartEnvironmentValidation()
 			VersionRequest.WorkingDirectory = WorkingDir;
 			VersionRequest.Arguments = { TEXT("--version") };
 			const FGitProcessResult Res = Runner->Run(VersionRequest);
-			const FString StdOut = BytesToTextUtf8Lossy(Res.StdOut);
+			const FString StdOut = UnrealGit::Workers::BytesToTextUtf8Lossy(Res.StdOut);
 			FString Parsed;
 			if (Res.ExitCode == 0 && FGitVersionParser::ParseGitVersion(StdOut, Parsed))
 			{
@@ -312,7 +310,7 @@ void FUnrealGitSourceControlProvider::StartEnvironmentValidation()
 			LfsRequest.WorkingDirectory = WorkingDir;
 			LfsRequest.Arguments = { TEXT("lfs"), TEXT("version") };
 			const FGitProcessResult Res = Runner->Run(LfsRequest);
-			const FString StdOut = BytesToTextUtf8Lossy(Res.StdOut);
+			const FString StdOut = UnrealGit::Workers::BytesToTextUtf8Lossy(Res.StdOut);
 			FString Parsed;
 			if (Res.ExitCode == 0 && FGitVersionParser::ParseGitLfsVersion(StdOut, Parsed))
 			{
@@ -328,7 +326,7 @@ void FUnrealGitSourceControlProvider::StartEnvironmentValidation()
 			const FGitProcessResult Res = Runner->Run(NameRequest);
 			if (Res.ExitCode == 0)
 			{
-				Info.UserName = BytesToTextUtf8Lossy(Res.StdOut).TrimStartAndEnd();
+				Info.UserName = UnrealGit::Workers::BytesToTextUtf8Lossy(Res.StdOut).TrimStartAndEnd();
 			}
 		}
 
@@ -339,7 +337,7 @@ void FUnrealGitSourceControlProvider::StartEnvironmentValidation()
 			const FGitProcessResult Res = Runner->Run(EmailRequest);
 			if (Res.ExitCode == 0)
 			{
-				Info.UserEmail = BytesToTextUtf8Lossy(Res.StdOut).TrimStartAndEnd();
+				Info.UserEmail = UnrealGit::Workers::BytesToTextUtf8Lossy(Res.StdOut).TrimStartAndEnd();
 			}
 		}
 
@@ -348,7 +346,8 @@ void FUnrealGitSourceControlProvider::StartEnvironmentValidation()
 }
 
 ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
-	const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe>& InOperation,
+	const FSourceControlOperationRef& InOperation,
+	FSourceControlChangelistPtr /*InChangelist*/,
 	const TArray<FString>& InFiles,
 	EConcurrency::Type InConcurrency,
 	const FSourceControlOperationComplete& InOperationCompleteDelegate)
@@ -411,6 +410,12 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 		return ECommandResult::Failed;
 	}
 
+	if (!CanExecuteOperation(InOperation))
+	{
+		LastErrorText = FText::FromString(FString::Printf(TEXT("Operation not supported: %s"), *OpName.ToString()));
+		return ECommandResult::Failed;
+	}
+
 	bool bQueryLfsLocks = false;
 	if (OpName == "UpdateStatus" && Settings.bEnableLfsLocks)
 	{
@@ -448,18 +453,84 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	return ECommandResult::Succeeded;
 }
 
-bool FUnrealGitSourceControlProvider::CanCancelOperation(const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe>& /*InOperation*/) const
+bool FUnrealGitSourceControlProvider::CanExecuteOperation(const FSourceControlOperationRef& InOperation) const
 {
+	const FName OpName = InOperation->GetName();
+	return OpName == "UpdateStatus"
+		|| OpName == "CheckOut"
+		|| OpName == "MarkForAdd"
+		|| OpName == "Revert"
+		|| OpName == "CheckIn"
+		|| OpName == "Sync"
+		|| OpName == "GetHistory"
+		|| OpName == "Lock"
+		|| OpName == "Unlock";
+}
+
+bool FUnrealGitSourceControlProvider::CanCancelOperation(const FSourceControlOperationRef& /*InOperation*/) const
+{
+	// UnrealGit operations run via an async worker/future without cooperative cancellation today.
 	return false;
 }
 
-void FUnrealGitSourceControlProvider::CancelOperation(const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe>& /*InOperation*/)
+void FUnrealGitSourceControlProvider::CancelOperation(const FSourceControlOperationRef& /*InOperation*/)
 {
+	// Not supported (see CanCancelOperation).
+}
+
+TArray<TSharedRef<ISourceControlLabel>> FUnrealGitSourceControlProvider::GetLabels(const FString& /*InMatchingSpec*/) const
+{
+	return {};
 }
 
 bool FUnrealGitSourceControlProvider::UsesLocalReadOnlyState() const
 {
 	return true;
+}
+
+TArray<FSourceControlChangelistRef> FUnrealGitSourceControlProvider::GetChangelists(EStateCacheUsage::Type /*InStateCacheUsage*/)
+{
+	return {};
+}
+
+bool FUnrealGitSourceControlProvider::UsesChangelists() const
+{
+	return false;
+}
+
+bool FUnrealGitSourceControlProvider::UsesUncontrolledChangelists() const
+{
+	return false;
+}
+
+bool FUnrealGitSourceControlProvider::UsesCheckout() const
+{
+	return true;
+}
+
+bool FUnrealGitSourceControlProvider::UsesFileRevisions() const
+{
+	return true;
+}
+
+bool FUnrealGitSourceControlProvider::UsesSnapshots() const
+{
+	return false;
+}
+
+bool FUnrealGitSourceControlProvider::AllowsDiffAgainstDepot() const
+{
+	return true;
+}
+
+TOptional<bool> FUnrealGitSourceControlProvider::IsAtLatestRevision() const
+{
+	return TOptional<bool>();
+}
+
+TOptional<int> FUnrealGitSourceControlProvider::GetNumLocalChanges() const
+{
+	return TOptional<int>();
 }
 
 void FUnrealGitSourceControlProvider::UpdateStatesFromStatusSnapshot(const FGitStatusSnapshot& Snapshot, const TArray<FString>& RequestedFiles)
@@ -529,7 +600,7 @@ void FUnrealGitSourceControlProvider::ApplyLfsLocksToStates(const TOptional<FGit
 	}
 }
 
-bool FUnrealGitSourceControlProvider::Tick(float /*DeltaTime*/)
+void FUnrealGitSourceControlProvider::Tick()
 {
 	if (EnvironmentFuture.IsValid() && EnvironmentFuture.IsReady())
 	{
@@ -558,6 +629,7 @@ bool FUnrealGitSourceControlProvider::Tick(float /*DeltaTime*/)
 	for (const TSharedRef<FCommand, ESPMode::ThreadSafe>& Command : Completed)
 	{
 		const FUnrealGitWorkerOutput Output = Command->Future.Get();
+		bool bAnyStateChanged = false;
 
 		if (Output.RepoRoot.IsSet())
 		{
@@ -568,6 +640,7 @@ bool FUnrealGitSourceControlProvider::Tick(float /*DeltaTime*/)
 		{
 			UpdateStatesFromStatusSnapshot(Output.StatusSnapshot.GetValue(), Command->Files);
 			LastErrorText = FText::GetEmpty();
+			bAnyStateChanged = true;
 		}
 		else if (!Output.bSuccess)
 		{
@@ -578,11 +651,13 @@ bool FUnrealGitSourceControlProvider::Tick(float /*DeltaTime*/)
 		{
 			CachedLfsLocks = Output.LfsLocks;
 			bHasCachedLfsLocks = true;
+			bAnyStateChanged = true;
 		}
 
 		if (Output.bSuccess && Output.StatusSnapshot.IsSet() && bHasCachedLfsLocks)
 		{
 			ApplyLfsLocksToStates(Output.StatusSnapshot, CachedLfsLocks);
+			bAnyStateChanged = true;
 		}
 
 		if (Output.bSuccess && Output.FileHistoryByAbsoluteFile.Num() > 0 && RevisionMaterializer.IsValid())
@@ -606,6 +681,7 @@ bool FUnrealGitSourceControlProvider::Tick(float /*DeltaTime*/)
 
 				const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
 				StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetHistory(Revisions);
+				bAnyStateChanged = true;
 			}
 		}
 
@@ -616,10 +692,20 @@ bool FUnrealGitSourceControlProvider::Tick(float /*DeltaTime*/)
 
 		if (Output.bSuccess && Output.bShouldUpdateStatus)
 		{
-			const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe> UpdateOp = ISourceControlOperation::Create<FUpdateStatus>();
-			Execute(UpdateOp, Output.FilesToUpdateStatus, EConcurrency::Asynchronous, FSourceControlOperationComplete());
+			const FSourceControlOperationRef UpdateOp = ISourceControlOperation::Create<FUpdateStatus>();
+			Execute(UpdateOp, nullptr, Output.FilesToUpdateStatus, EConcurrency::Asynchronous, FSourceControlOperationComplete());
+		}
+
+		if (bAnyStateChanged)
+		{
+			SourceControlStateChanged.Broadcast();
 		}
 	}
-
-	return true;
 }
+
+#if SOURCE_CONTROL_WITH_SLATE
+TSharedRef<SWidget> FUnrealGitSourceControlProvider::MakeSettingsWidget() const
+{
+	return SNullWidget::NullWidget;
+}
+#endif // SOURCE_CONTROL_WITH_SLATE

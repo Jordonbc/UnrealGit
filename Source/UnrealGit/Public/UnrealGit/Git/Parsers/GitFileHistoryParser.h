@@ -10,7 +10,7 @@
  *
  * This parser is deterministic and side-effect free.
  */
-class FGitFileHistoryParser final
+class UNREALGIT_API FGitFileHistoryParser final
 {
 public:
 	/**
@@ -28,4 +28,3 @@ public:
 	 */
 	static bool Parse(const TArray<uint8>& StdOut, const FString& InitialRepoRelativePath, TArray<FGitFileRevision>& OutHistory, FString& OutError);
 };
-

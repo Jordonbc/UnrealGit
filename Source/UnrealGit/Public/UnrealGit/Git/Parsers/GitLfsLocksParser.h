@@ -10,9 +10,8 @@
  *
  * This parser is deterministic and side-effect free.
  */
-class FGitLfsLocksParser final
+class UNREALGIT_API FGitLfsLocksParser final
 {
 public:
 	static bool ParseJson(const FString& StdOutText, TArray<FGitLfsLock>& OutLocks, FString& OutError);
 };
-

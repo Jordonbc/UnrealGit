@@ -2,7 +2,9 @@
 
 #include "UnrealGit/SourceControl/UnrealGitSourceControlState.h"
 
-#include "HAL/FileManager.h"
+#if SOURCE_CONTROL_WITH_SLATE
+#include "Styling/AppStyle.h"
+#endif // SOURCE_CONTROL_WITH_SLATE
 
 FUnrealGitSourceControlState::FUnrealGitSourceControlState(FString InAbsoluteFilename)
 	: AbsoluteFilename(MoveTemp(InAbsoluteFilename))
@@ -59,50 +61,49 @@ TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FUnrealGitSourceControlS
 	return TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe>();
 }
 
-FName FUnrealGitSourceControlState::GetIconName() const
+TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FUnrealGitSourceControlState::GetCurrentRevision() const
 {
+	return History.Num() > 0 ? History[0] : TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe>();
+}
+
+#if SOURCE_CONTROL_WITH_SLATE
+FSlateIcon FUnrealGitSourceControlState::GetIcon() const
+{
+	const FName StyleSet = FAppStyle::GetAppStyleSetName();
+
 	if (bIsConflicted || FileState == EGitFileState::Conflicted)
 	{
-		return "SourceControl.StatusIcon.Conflicted";
+		return FSlateIcon(StyleSet, "Plastic.Conflicted");
 	}
 
 	if (FileState == EGitFileState::Added)
 	{
-		return "SourceControl.StatusIcon.OpenForAdd";
+		return FSlateIcon(StyleSet, "Perforce.OpenForAdd");
 	}
 
 	if (FileState == EGitFileState::Deleted)
 	{
-		return "SourceControl.StatusIcon.MarkedForDelete";
+		return FSlateIcon(StyleSet, "Perforce.MarkedForDelete");
 	}
 
 	if (FileState == EGitFileState::Modified || bIsStaged || bIsUnstaged)
 	{
-		return "SourceControl.StatusIcon.CheckedOut";
+		return FSlateIcon(StyleSet, "Perforce.CheckedOut");
 	}
 
 	if (FileState == EGitFileState::Untracked)
 	{
-		return "SourceControl.StatusIcon.NotInDepot";
+		return FSlateIcon(StyleSet, "Perforce.NotInDepot");
 	}
 
 	if (FileState == EGitFileState::Ignored)
 	{
-		return "SourceControl.StatusIcon.NotInDepot";
+		return FSlateIcon(StyleSet, "Plastic.Ignored");
 	}
 
-	if (FileState == EGitFileState::Unchanged && bIsTracked)
-	{
-		return "SourceControl.StatusIcon.Controlled";
-	}
-
-	return "SourceControl.StatusIcon.Unknown";
+	return FSlateIcon(StyleSet, "SourceControl.StatusIcon.Unknown");
 }
-
-FName FUnrealGitSourceControlState::GetSmallIconName() const
-{
-	return GetIconName();
-}
+#endif // SOURCE_CONTROL_WITH_SLATE
 
 FText FUnrealGitSourceControlState::GetDisplayName() const
 {
@@ -151,7 +152,7 @@ bool FUnrealGitSourceControlState::CanCheckIn() const
 
 bool FUnrealGitSourceControlState::CanCheckout() const
 {
-	return bIsTracked && !IsLockedOther();
+	return bIsTracked && LockState != EGitLockState::LockedByOther;
 }
 
 bool FUnrealGitSourceControlState::IsCheckedOut() const
@@ -161,7 +162,7 @@ bool FUnrealGitSourceControlState::IsCheckedOut() const
 
 bool FUnrealGitSourceControlState::IsCheckedOutOther(FString* Who) const
 {
-	if (IsLockedOther())
+	if (LockState == EGitLockState::LockedByOther)
 	{
 		if (Who)
 		{
@@ -173,6 +174,31 @@ bool FUnrealGitSourceControlState::IsCheckedOutOther(FString* Who) const
 }
 
 bool FUnrealGitSourceControlState::IsCheckedOutInOtherBranch(const FString& /*CurrentBranch*/) const
+{
+	return false;
+}
+
+bool FUnrealGitSourceControlState::IsModifiedInOtherBranch(const FString& /*CurrentBranch*/) const
+{
+	return false;
+}
+
+bool FUnrealGitSourceControlState::IsCheckedOutOrModifiedInOtherBranch(const FString& /*CurrentBranch*/) const
+{
+	return false;
+}
+
+TArray<FString> FUnrealGitSourceControlState::GetCheckedOutBranches() const
+{
+	return {};
+}
+
+FString FUnrealGitSourceControlState::GetOtherUserBranchCheckedOuts() const
+{
+	return FString();
+}
+
+bool FUnrealGitSourceControlState::GetOtherBranchHeadModification(FString& /*HeadBranchOut*/, FString& /*ActionOut*/, int32& /*HeadChangeListOut*/) const
 {
 	return false;
 }
@@ -204,17 +230,7 @@ bool FUnrealGitSourceControlState::IsIgnored() const
 
 bool FUnrealGitSourceControlState::CanEdit() const
 {
-	return !IsReadOnly();
-}
-
-bool FUnrealGitSourceControlState::IsModified() const
-{
-	return FileState == EGitFileState::Modified || bIsStaged || bIsUnstaged;
-}
-
-bool FUnrealGitSourceControlState::CanAdd() const
-{
-	return FileState == EGitFileState::Untracked;
+	return !IsCheckedOutOther();
 }
 
 bool FUnrealGitSourceControlState::CanDelete() const
@@ -227,51 +243,22 @@ bool FUnrealGitSourceControlState::IsUnknown() const
 	return FileState == EGitFileState::Unknown;
 }
 
+bool FUnrealGitSourceControlState::IsModified() const
+{
+	return FileState == EGitFileState::Modified || bIsStaged || bIsUnstaged;
+}
+
+bool FUnrealGitSourceControlState::CanAdd() const
+{
+	return FileState == EGitFileState::Untracked;
+}
+
 bool FUnrealGitSourceControlState::IsConflicted() const
 {
 	return bIsConflicted || FileState == EGitFileState::Conflicted;
-}
-
-bool FUnrealGitSourceControlState::IsReadOnly() const
-{
-	return IFileManager::Get().IsReadOnly(*AbsoluteFilename);
 }
 
 bool FUnrealGitSourceControlState::CanRevert() const
 {
 	return IsModified() || IsAdded() || IsDeleted() || IsConflicted();
 }
-
-bool FUnrealGitSourceControlState::CanLock() const
-{
-	return LockState == EGitLockState::NotLocked;
-}
-
-bool FUnrealGitSourceControlState::CanUnlock() const
-{
-	return LockState == EGitLockState::LockedByMe;
-}
-
-bool FUnrealGitSourceControlState::IsLocked() const
-{
-	return LockState == EGitLockState::LockedByMe || LockState == EGitLockState::LockedByOther;
-}
-
-bool FUnrealGitSourceControlState::IsLockedOther(FString* Who) const
-{
-	if (LockState == EGitLockState::LockedByOther)
-	{
-		if (Who)
-		{
-			*Who = LockOwner;
-		}
-		return true;
-	}
-	return false;
-}
-
-bool FUnrealGitSourceControlState::IsLockedLocal() const
-{
-	return LockState == EGitLockState::LockedByMe;
-}
-

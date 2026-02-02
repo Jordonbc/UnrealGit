@@ -2,7 +2,7 @@
 
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitCheckOutWorker.h"
 
-#include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
 
 FName FGitCheckOutWorker::GetName() const
@@ -40,7 +40,8 @@ void FGitCheckOutWorker::Execute(
 			return;
 		}
 
-		IFileManager::Get().SetReadOnly(*AbsolutePath, false);
+		IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+		PlatformFile.SetReadOnly(*AbsolutePath, false);
 
 		if (Settings.bEnableLfsLocks && Settings.bAutoLockOnCheckout)
 		{

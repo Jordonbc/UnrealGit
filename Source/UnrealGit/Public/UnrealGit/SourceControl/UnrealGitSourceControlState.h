@@ -31,8 +31,12 @@ public:
 	virtual TSharedPtr<class ISourceControlRevision, ESPMode::ThreadSafe> FindHistoryRevision(int32 RevisionNumber) const override;
 	virtual TSharedPtr<class ISourceControlRevision, ESPMode::ThreadSafe> FindHistoryRevision(const FString& InRevision) const override;
 
-	virtual FName GetIconName() const override;
-	virtual FName GetSmallIconName() const override;
+	virtual TSharedPtr<class ISourceControlRevision, ESPMode::ThreadSafe> GetCurrentRevision() const override;
+
+#if SOURCE_CONTROL_WITH_SLATE
+	virtual FSlateIcon GetIcon() const override;
+#endif // SOURCE_CONTROL_WITH_SLATE
+
 	virtual FText GetDisplayName() const override;
 	virtual FText GetDisplayTooltip() const override;
 	virtual const FString& GetFilename() const override;
@@ -43,24 +47,23 @@ public:
 	virtual bool IsCheckedOut() const override;
 	virtual bool IsCheckedOutOther(FString* Who = nullptr) const override;
 	virtual bool IsCheckedOutInOtherBranch(const FString& CurrentBranch = FString()) const override;
+	virtual bool IsModifiedInOtherBranch(const FString& CurrentBranch = FString()) const override;
+	virtual bool IsCheckedOutOrModifiedInOtherBranch(const FString& CurrentBranch = FString()) const override;
+	virtual TArray<FString> GetCheckedOutBranches() const override;
+	virtual FString GetOtherUserBranchCheckedOuts() const override;
+	virtual bool GetOtherBranchHeadModification(FString& HeadBranchOut, FString& ActionOut, int32& HeadChangeListOut) const override;
 	virtual bool IsCurrent() const override;
 	virtual bool IsSourceControlled() const override;
 	virtual bool IsAdded() const override;
 	virtual bool IsDeleted() const override;
 	virtual bool IsIgnored() const override;
 	virtual bool CanEdit() const override;
-	virtual bool IsModified() const override;
-	virtual bool CanAdd() const override;
 	virtual bool CanDelete() const override;
 	virtual bool IsUnknown() const override;
+	virtual bool IsModified() const override;
+	virtual bool CanAdd() const override;
 	virtual bool IsConflicted() const override;
-	virtual bool IsReadOnly() const override;
 	virtual bool CanRevert() const override;
-	virtual bool CanLock() const override;
-	virtual bool CanUnlock() const override;
-	virtual bool IsLocked() const override;
-	virtual bool IsLockedOther(FString* Who = nullptr) const override;
-	virtual bool IsLockedLocal() const override;
 
 private:
 	FString AbsoluteFilename;
@@ -77,4 +80,3 @@ private:
 
 	TArray<TSharedRef<class ISourceControlRevision, ESPMode::ThreadSafe>> History;
 };
-

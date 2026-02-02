@@ -16,9 +16,8 @@
  * Output:
  * - A status snapshot describing branch state and per-file state.
  */
-class FGitStatusParser final
+class UNREALGIT_API FGitStatusParser final
 {
 public:
 	static bool ParsePorcelainV2Z(const TArray<uint8>& StdOut, FGitStatusSnapshot& OutSnapshot, FString& OutError);
 };
-

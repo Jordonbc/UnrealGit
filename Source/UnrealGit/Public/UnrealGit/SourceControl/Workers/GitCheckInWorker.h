@@ -11,7 +11,7 @@
  * - Stages selected files only and performs a commit with UTF-8 message.
  * - Optionally pushes based on validated settings.
  */
-class FGitCheckInWorker final : public IGitSourceControlWorker
+class UNREALGIT_API FGitCheckInWorker final : public IGitSourceControlWorker
 {
 public:
 	virtual FName GetName() const override;
@@ -26,4 +26,3 @@ public:
 		const FString& CurrentRepoRoot,
 		FUnrealGitWorkerOutput& OutOutput) override;
 };
-

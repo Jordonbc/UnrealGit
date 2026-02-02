@@ -22,7 +22,7 @@ class FGitRevisionMaterializer;
  * - All Git operations run asynchronously on a background thread.
  * - Provider public API methods are called on the game thread unless noted otherwise.
  */
-class FUnrealGitSourceControlProvider final : public ISourceControlProvider, public TSharedFromThis<FUnrealGitSourceControlProvider, ESPMode::ThreadSafe>
+class FUnrealGitSourceControlProvider final : public ISourceControlProvider
 {
 public:
 	FUnrealGitSourceControlProvider();
@@ -33,24 +33,43 @@ public:
 	virtual void Close() override;
 	virtual const FName& GetName() const override;
 	virtual FText GetStatusText() const override;
+	virtual TMap<EStatus, FString> GetStatus() const override;
 	virtual bool IsEnabled() const override;
 	virtual bool IsAvailable() const override;
 
-	virtual FSourceControlStatePtr GetState(const FString& Filename, EStateCacheUsage::Type InStateCacheUsage) override;
-	virtual FSourceControlStatePtr GetState(const FSourceControlChangelistPtr& InChangelist, const FString& Filename) override;
-	virtual TArray<FSourceControlStateRef> GetState(const TArray<FString>& InFiles, EStateCacheUsage::Type InStateCacheUsage) override;
+	virtual bool QueryStateBranchConfig(const FString& ConfigSrc, const FString& ConfigDest) override;
+	virtual void RegisterStateBranches(const TArray<FString>& BranchNames, const FString& ContentRoot) override;
+	virtual int32 GetStateBranchIndex(const FString& BranchName) const override;
 
-	virtual ECommandResult::Type Execute(
-		const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe>& InOperation,
-		const TArray<FString>& InFiles,
-		EConcurrency::Type InConcurrency = EConcurrency::Asynchronous,
-		const FSourceControlOperationComplete& InOperationCompleteDelegate = FSourceControlOperationComplete()) override;
+	virtual ECommandResult::Type GetState(const TArray<FString>& InFiles, TArray<FSourceControlStateRef>& OutState, EStateCacheUsage::Type InStateCacheUsage) override;
+	virtual ECommandResult::Type GetState(const TArray<FSourceControlChangelistRef>& InChangelists, TArray<FSourceControlChangelistStateRef>& OutState, EStateCacheUsage::Type InStateCacheUsage) override;
+	virtual TArray<FSourceControlStateRef> GetCachedStateByPredicate(TFunctionRef<bool(const FSourceControlStateRef&)> Predicate) const override;
 
-	virtual bool CanCancelOperation(const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe>& InOperation) const override;
-	virtual void CancelOperation(const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe>& InOperation) override;
+	virtual FDelegateHandle RegisterSourceControlStateChanged_Handle(const FSourceControlStateChanged::FDelegate& SourceControlStateChanged) override;
+	virtual void UnregisterSourceControlStateChanged_Handle(FDelegateHandle Handle) override;
+
+	virtual ECommandResult::Type Execute(const FSourceControlOperationRef& InOperation, FSourceControlChangelistPtr InChangelist, const TArray<FString>& InFiles, EConcurrency::Type InConcurrency = EConcurrency::Synchronous, const FSourceControlOperationComplete& InOperationCompleteDelegate = FSourceControlOperationComplete()) override;
+	virtual bool CanExecuteOperation(const FSourceControlOperationRef& InOperation) const override;
+	virtual bool CanCancelOperation(const FSourceControlOperationRef& InOperation) const override;
+	virtual void CancelOperation(const FSourceControlOperationRef& InOperation) override;
+
+	virtual TArray<TSharedRef<class ISourceControlLabel>> GetLabels(const FString& InMatchingSpec) const override;
+	virtual TArray<FSourceControlChangelistRef> GetChangelists(EStateCacheUsage::Type InStateCacheUsage) override;
 
 	virtual bool UsesLocalReadOnlyState() const override;
-	virtual bool Tick(float DeltaTime) override;
+	virtual bool UsesChangelists() const override;
+	virtual bool UsesUncontrolledChangelists() const override;
+	virtual bool UsesCheckout() const override;
+	virtual bool UsesFileRevisions() const override;
+	virtual bool UsesSnapshots() const override;
+	virtual bool AllowsDiffAgainstDepot() const override;
+	virtual TOptional<bool> IsAtLatestRevision() const override;
+	virtual TOptional<int> GetNumLocalChanges() const override;
+	virtual void Tick() override;
+
+#if SOURCE_CONTROL_WITH_SLATE
+	virtual TSharedRef<class SWidget> MakeSettingsWidget() const override;
+#endif // SOURCE_CONTROL_WITH_SLATE
 
 private:
 	struct FCommand;
@@ -60,7 +79,6 @@ private:
 
 	FSourceControlStateRef GetOrCreateStateInternal(const FString& AbsoluteFilename);
 	FString GetWorkingDirectoryHint() const;
-	void HandleSettingsObjectChanged(UObject* ObjectBeingModified, struct FPropertyChangedEvent& PropertyChangedEvent);
 	void StartEnvironmentValidation();
 
 private:
@@ -80,8 +98,7 @@ private:
 	mutable FCriticalSection EnvironmentLock;
 	TOptional<FGitEnvironmentInfo> EnvironmentInfo;
 	TFuture<FGitEnvironmentInfo> EnvironmentFuture;
-
-	FDelegateHandle SettingsChangedHandle;
+	FSourceControlStateChanged SourceControlStateChanged;
 
 	FDateTime NextLfsLocksRefreshUtc = FDateTime(0);
 	bool bHasCachedLfsLocks = false;

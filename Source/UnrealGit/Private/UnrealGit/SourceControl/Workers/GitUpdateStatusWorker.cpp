@@ -5,19 +5,8 @@
 #include "ISourceControlOperation.h"
 #include "UnrealGit/Git/IGitProcessRunner.h"
 #include "UnrealGit/Git/Parsers/GitLfsLocksParser.h"
-#include "UnrealGit/Git/Parsers/GitRevParseParser.h"
 #include "UnrealGit/Git/Parsers/GitStatusParser.h"
-
-static FString BytesToTextUtf8Lossy(const TArray<uint8>& Bytes)
-{
-	if (Bytes.Num() == 0)
-	{
-		return FString();
-	}
-
-	FUTF8ToTCHAR Converter(reinterpret_cast<const ANSICHAR*>(Bytes.GetData()), Bytes.Num());
-	return FString(Converter.Length(), Converter.Get());
-}
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
 
 FName FGitUpdateStatusWorker::GetName() const
 {
@@ -37,21 +26,11 @@ void FGitUpdateStatusWorker::Execute(
 	OutOutput = FUnrealGitWorkerOutput();
 
 	FString RepoRoot = CurrentRepoRoot;
-	if (RepoRoot.IsEmpty())
+	if (!UnrealGit::Workers::EnsureRepoRoot(ProcessRunner, WorkingDirectoryHint, RepoRoot))
 	{
-		FGitProcessRequest RootRequest;
-		RootRequest.WorkingDirectory = WorkingDirectoryHint;
-		RootRequest.Arguments = { TEXT("rev-parse"), TEXT("--show-toplevel") };
-
-		const FGitProcessResult RootResult = ProcessRunner->Run(RootRequest);
-		const FString RootStdOut = BytesToTextUtf8Lossy(RootResult.StdOut);
-
-		if (RootResult.ExitCode != 0 || !FGitRevParseParser::ParseShowToplevel(RootStdOut, RepoRoot))
-		{
-			OutOutput.bSuccess = false;
-			OutOutput.ErrorText = FText::FromString(TEXT("Git repository root could not be determined. Ensure the project is inside a Git worktree."));
-			return;
-		}
+		OutOutput.bSuccess = false;
+		OutOutput.ErrorText = FText::FromString(TEXT("Git repository root could not be determined. Ensure the project is inside a Git worktree."));
+		return;
 	}
 
 	FGitProcessRequest StatusRequest;
@@ -87,7 +66,7 @@ void FGitUpdateStatusWorker::Execute(
 	if (StatusResult.ExitCode != 0)
 	{
 		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(BytesToTextUtf8Lossy(StatusResult.StdErr));
+		OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdErr));
 		return;
 	}
 
@@ -115,7 +94,7 @@ void FGitUpdateStatusWorker::Execute(
 		{
 			TArray<FGitLfsLock> Locks;
 			FString LocksError;
-			const FString LocksText = BytesToTextUtf8Lossy(LocksResult.StdOut);
+			const FString LocksText = UnrealGit::Workers::BytesToTextUtf8Lossy(LocksResult.StdOut);
 			if (FGitLfsLocksParser::ParseJson(LocksText, Locks, LocksError))
 			{
 				OutOutput.bHasLfsLocks = true;
