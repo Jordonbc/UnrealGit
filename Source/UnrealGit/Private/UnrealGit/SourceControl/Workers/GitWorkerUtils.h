@@ -23,20 +23,64 @@ namespace UnrealGit::Workers
 	inline bool EnsureRepoRoot(
 		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
 		const FString& WorkingDirectoryHint,
-		FString& InOutRepoRoot)
+		FString& InOutRepoRoot,
+		FString* OutError = nullptr)
 	{
 		if (!InOutRepoRoot.IsEmpty())
 		{
 			return true;
 		}
 
-		FGitProcessRequest RootRequest;
-		RootRequest.WorkingDirectory = WorkingDirectoryHint;
-		RootRequest.Arguments = { TEXT("rev-parse"), TEXT("--show-toplevel") };
+		FString CurrentDir = WorkingDirectoryHint;
+		if (CurrentDir.IsEmpty())
+		{
+			CurrentDir = FPaths::ProjectDir();
+		}
+		CurrentDir = FPaths::ConvertRelativePathToFull(CurrentDir);
+		FPaths::NormalizeDirectoryName(CurrentDir);
 
-		const FGitProcessResult RootResult = ProcessRunner->Run(RootRequest);
-		const FString RootStdOut = BytesToTextUtf8Lossy(RootResult.StdOut);
-		return RootResult.ExitCode == 0 && FGitRevParseParser::ParseShowToplevel(RootStdOut, InOutRepoRoot);
+		int32 LastExitCode = INDEX_NONE;
+		FString LastStdErr;
+		FString LastAttemptDir;
+
+		for (int32 Depth = 0; Depth < 32; ++Depth)
+		{
+			LastAttemptDir = CurrentDir;
+
+			FGitProcessRequest RootRequest;
+			RootRequest.WorkingDirectory = CurrentDir;
+			RootRequest.Arguments = { TEXT("rev-parse"), TEXT("--show-toplevel") };
+
+			const FGitProcessResult RootResult = ProcessRunner->Run(RootRequest);
+			LastExitCode = RootResult.ExitCode;
+			LastStdErr = BytesToTextUtf8Lossy(RootResult.StdErr).TrimStartAndEnd();
+
+			const FString RootStdOut = BytesToTextUtf8Lossy(RootResult.StdOut);
+			if (RootResult.ExitCode == 0 && FGitRevParseParser::ParseShowToplevel(RootStdOut, InOutRepoRoot))
+			{
+				return true;
+			}
+
+			const FString ParentDir = FPaths::GetPath(CurrentDir);
+			if (ParentDir.IsEmpty() || ParentDir == CurrentDir)
+			{
+				break;
+			}
+
+			CurrentDir = ParentDir;
+		}
+
+		if (OutError)
+		{
+			const FString Err = LastStdErr.IsEmpty()
+				? FString::Printf(TEXT("Git repository root could not be determined from \"%s\" (last attempt: \"%s\", exit code: %d)."),
+					*WorkingDirectoryHint, *LastAttemptDir, LastExitCode)
+				: FString::Printf(TEXT("Git repository root could not be determined from \"%s\" (last attempt: \"%s\", exit code: %d, stderr: %s)."),
+					*WorkingDirectoryHint, *LastAttemptDir, LastExitCode, *LastStdErr);
+			*OutError = Err;
+		}
+
+		return false;
 	}
 
 	inline bool TryMakeRepoRelativePath(const FString& RepoRoot, const FString& AbsolutePath, FString& OutRelative)
@@ -58,4 +102,3 @@ namespace UnrealGit::Workers
 		return true;
 	}
 }
-
