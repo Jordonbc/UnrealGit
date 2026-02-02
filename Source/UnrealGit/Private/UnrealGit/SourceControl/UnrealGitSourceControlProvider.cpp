@@ -4,6 +4,7 @@
 
 #include "Async/Async.h"
 #include "ISourceControlOperation.h"
+#include "ISourceControlModule.h"
 #include "SourceControlOperations.h"
 #include "UnrealGit/Git/IGitProcessRunner.h"
 #include "UnrealGit/Git/GitModels.h"
@@ -73,18 +74,26 @@ FUnrealGitSourceControlProvider::~FUnrealGitSourceControlProvider()
 	Close();
 }
 
-void FUnrealGitSourceControlProvider::Init(bool /*bForceConnection*/)
+void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
 {
 	LastErrorText = FText::GetEmpty();
+
+	UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Init (bForceConnection=%s)"), bForceConnection ? TEXT("true") : TEXT("false"));
 
 	FText SettingsError;
 	if (!FUnrealGitSettingsResolver::Build(Settings, SettingsError))
 	{
 		LastErrorText = SettingsError;
+		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Settings resolver failed: %s"), *SettingsError.ToString());
 		Settings = FUnrealGitProviderSettings();
 		Settings.GitExecutable = TEXT("git");
 		Settings.RepositoryDiscoveryDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 	}
+
+	UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: GitExecutable=\"%s\" RepoDiscoveryDir=\"%s\" EnableLfsLocks=%s"),
+		*Settings.GitExecutable,
+		*Settings.RepositoryDiscoveryDirectory,
+		Settings.bEnableLfsLocks ? TEXT("true") : TEXT("false"));
 
 	ProcessRunner = MakeShared<FSystemGitProcessRunner, ESPMode::ThreadSafe>(Settings.GitExecutable);
 
@@ -92,6 +101,12 @@ void FUnrealGitSourceControlProvider::Init(bool /*bForceConnection*/)
 	RevisionMaterializer = MakeShared<FGitRevisionMaterializer, ESPMode::ThreadSafe>(SessionDir);
 
 	StartEnvironmentValidation();
+
+	if (bForceConnection)
+	{
+		const FSourceControlOperationRef ConnectOp = ISourceControlOperation::Create<FConnect>();
+		Execute(ConnectOp, nullptr, TArray<FString>(), EConcurrency::Asynchronous, FSourceControlOperationComplete());
+	}
 }
 
 void FUnrealGitSourceControlProvider::Close()
@@ -352,22 +367,24 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	EConcurrency::Type InConcurrency,
 	const FSourceControlOperationComplete& InOperationCompleteDelegate)
 {
-	if (IsOperationSynchronousOnGameThread(InConcurrency))
+	const FName OpName = InOperation->GetName();
+
+	if (IsOperationSynchronousOnGameThread(InConcurrency) && OpName != "Connect")
 	{
 		LastErrorText = FText::FromString(TEXT("UnrealGit does not execute synchronous operations on the game thread."));
+		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Execute(%s) failed: %s"), *OpName.ToString(), *LastErrorText.ToString());
 		return ECommandResult::Failed;
 	}
 
 	if (!ProcessRunner.IsValid())
 	{
 		LastErrorText = FText::FromString(TEXT("UnrealGit process runner not initialized."));
+		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Execute(%s) failed: %s"), *OpName.ToString(), *LastErrorText.ToString());
 		return ECommandResult::Failed;
 	}
 
-	const FName OpName = InOperation->GetName();
-
 	TUniquePtr<IGitSourceControlWorker> Worker;
-	if (OpName == "UpdateStatus")
+	if (OpName == "UpdateStatus" || OpName == "Connect")
 	{
 		Worker = MakeUnique<FGitUpdateStatusWorker>();
 	}
@@ -407,17 +424,19 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	if (!Worker)
 	{
 		LastErrorText = FText::FromString(FString::Printf(TEXT("Operation not supported: %s"), *OpName.ToString()));
+		UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: %s"), *LastErrorText.ToString());
 		return ECommandResult::Failed;
 	}
 
 	if (!CanExecuteOperation(InOperation))
 	{
 		LastErrorText = FText::FromString(FString::Printf(TEXT("Operation not supported: %s"), *OpName.ToString()));
+		UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: %s"), *LastErrorText.ToString());
 		return ECommandResult::Failed;
 	}
 
 	bool bQueryLfsLocks = false;
-	if (OpName == "UpdateStatus" && Settings.bEnableLfsLocks)
+	if ((OpName == "UpdateStatus" || OpName == "Connect") && Settings.bEnableLfsLocks)
 	{
 		const FDateTime NowUtc = FDateTime::UtcNow();
 		if (NextLfsLocksRefreshUtc <= NowUtc)
@@ -450,6 +469,11 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 		Commands.Add(Command);
 	}
 
+	UE_LOG(LogSourceControl, Verbose, TEXT("UnrealGit: Queued operation %s (files=%d, concurrency=%s)"),
+		*OpName.ToString(),
+		InFiles.Num(),
+		InConcurrency == EConcurrency::Synchronous ? TEXT("Sync") : TEXT("Async"));
+
 	return ECommandResult::Succeeded;
 }
 
@@ -457,6 +481,7 @@ bool FUnrealGitSourceControlProvider::CanExecuteOperation(const FSourceControlOp
 {
 	const FName OpName = InOperation->GetName();
 	return OpName == "UpdateStatus"
+		|| OpName == "Connect"
 		|| OpName == "CheckOut"
 		|| OpName == "MarkForAdd"
 		|| OpName == "Revert"
@@ -609,6 +634,13 @@ void FUnrealGitSourceControlProvider::Tick()
 			FScopeLock Scope(&EnvironmentLock);
 			EnvironmentInfo = Info;
 		}
+		UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Environment: GitAvailable=%s GitVersion=\"%s\" LfsAvailable=%s LfsVersion=\"%s\" User=\"%s\" Email=\"%s\""),
+			Info.bGitAvailable ? TEXT("true") : TEXT("false"),
+			*Info.GitVersion,
+			Info.bGitLfsAvailable ? TEXT("true") : TEXT("false"),
+			*Info.GitLfsVersion,
+			*Info.UserName,
+			*Info.UserEmail);
 		EnvironmentFuture = TFuture<FGitEnvironmentInfo>();
 	}
 
@@ -630,6 +662,7 @@ void FUnrealGitSourceControlProvider::Tick()
 	{
 		const FUnrealGitWorkerOutput Output = Command->Future.Get();
 		bool bAnyStateChanged = false;
+		const FString OperationName = Command->Operation->GetName().ToString();
 
 		if (Output.RepoRoot.IsSet())
 		{
@@ -645,6 +678,7 @@ void FUnrealGitSourceControlProvider::Tick()
 		else if (!Output.bSuccess)
 		{
 			LastErrorText = Output.ErrorText;
+			UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Operation %s failed: %s"), *OperationName, *LastErrorText.ToString());
 		}
 
 		if (Output.bSuccess && Output.bHasLfsLocks)
