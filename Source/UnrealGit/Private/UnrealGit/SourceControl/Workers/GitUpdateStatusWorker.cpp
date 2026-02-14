@@ -51,26 +51,43 @@ void FGitUpdateStatusWorker::Execute(
 	// Use pathspecs when specific files are requested to reduce work.
 	if (Files.Num() > 0)
 	{
-		StatusRequest.Arguments.Add(TEXT("--"));
-		for (const FString& AbsolutePath : Files)
+		TArray<FString> RepoRelativePaths;
+		RepoRelativePaths.Reserve(Files.Num());
+
+		for (const FString& FilePath : Files)
 		{
-			FString Relative = AbsolutePath;
-			if (!FPaths::MakePathRelativeTo(Relative, *RepoRoot))
+			FString Relative;
+			if (UnrealGit::Workers::TryMakeRepoRelativePath(RepoRoot, FilePath, Relative))
 			{
-				OutOutput.bSuccess = false;
-				OutOutput.ErrorText = FText::FromString(TEXT("File is outside the Git repository root."));
-				return;
+				RepoRelativePaths.Add(Relative);
 			}
-			FPaths::MakeStandardFilename(Relative);
-			StatusRequest.Arguments.Add(Relative);
+			else
+			{
+				UE_LOG(LogUnrealGit, Warning, TEXT("UpdateStatus: Skipping file outside repository root: %s"), *FPaths::ConvertRelativePathToFull(FilePath));
+			}
+		}
+
+		if (RepoRelativePaths.Num() > 0)
+		{
+			StatusRequest.Arguments.Add(TEXT("--"));
+			for (const FString& Relative : RepoRelativePaths)
+			{
+				StatusRequest.Arguments.Add(Relative);
+			}
 		}
 	}
 
 	const FGitProcessResult StatusResult = ProcessRunner->Run(StatusRequest);
+	UE_LOG(LogUnrealGit, Log, TEXT("UpdateStatus: git status result: exit=%d, stdout_len=%d, stdout='%s', stderr='%s'"), 
+		StatusResult.ExitCode, StatusResult.StdOut.Num(), 
+		*UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdOut).Left(500),
+		*UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdErr));
 	if (StatusResult.ExitCode != 0)
 	{
 		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdErr));
+		const FString StdErr = UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdErr).TrimStartAndEnd();
+		const FString StdOut = UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdOut).TrimStartAndEnd();
+		OutOutput.ErrorText = FText::FromString(!StdErr.IsEmpty() ? StdErr : StdOut);
 		return;
 	}
 

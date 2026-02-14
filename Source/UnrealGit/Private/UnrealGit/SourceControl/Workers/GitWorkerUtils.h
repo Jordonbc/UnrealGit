@@ -98,6 +98,11 @@ namespace UnrealGit::Workers
 		}
 
 		FPaths::MakeStandardFilename(Rel);
+		if (Rel.IsEmpty() || Rel == TEXT("..") || Rel.StartsWith(TEXT("../")) || Rel.Contains(TEXT("/../")))
+		{
+			return false;
+		}
+
 		OutRelative = MoveTemp(Rel);
 		return true;
 	}
