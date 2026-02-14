@@ -4,6 +4,7 @@
 
 #include "HAL/PlatformProcess.h"
 #include "Misc/ScopeExit.h"
+#include "ISourceControlModule.h"
 
 FSystemGitProcessRunner::FSystemGitProcessRunner(FString InGitExecutablePath)
 	: GitExecutablePath(MoveTemp(InGitExecutablePath))
@@ -107,7 +108,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 #endif
 	};
 
-	const double TimeoutSeconds = Request.Timeout.IsSet() ? Request.Timeout->GetTotalSeconds() : -1.0;
+	const double TimeoutSeconds = Request.Timeout.IsSet() ? Request.Timeout->GetTotalSeconds() : FSystemGitProcessRunner::DefaultTimeoutSeconds;
 	while (FPlatformProcess::IsProcRunning(Handle))
 	{
 		ReadAllAvailable(StdOutReadPipe, Result.StdOut);
@@ -115,6 +116,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 
 		if (TimeoutSeconds > 0.0 && (FPlatformTime::Seconds() - StartSeconds) > TimeoutSeconds)
 		{
+			UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: Process timed out after %f seconds: %s %s"), TimeoutSeconds, *GitExecutablePath, *Params);
 			Result.bWasCanceled = true;
 			FPlatformProcess::TerminateProc(Handle, true);
 			break;

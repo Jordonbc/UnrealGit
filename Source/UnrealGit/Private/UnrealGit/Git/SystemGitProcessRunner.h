@@ -19,6 +19,8 @@ public:
 
 	virtual FGitProcessResult Run(const FGitProcessRequest& Request) override;
 
+	static constexpr double DefaultTimeoutSeconds = 5.0;
+
 private:
 	FString GitExecutablePath;
 

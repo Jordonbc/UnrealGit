@@ -102,6 +102,32 @@ void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
 
 	StartEnvironmentValidation();
 
+	if (EnvironmentFuture.IsValid())
+	{
+		const double SyncTimeoutSeconds = FSystemGitProcessRunner::DefaultTimeoutSeconds;
+		const bool bEnvironmentReady = EnvironmentFuture.WaitFor(FTimespan::FromSeconds(SyncTimeoutSeconds));
+		if (bEnvironmentReady)
+		{
+			FGitEnvironmentInfo Info = EnvironmentFuture.Get();
+			{
+				FScopeLock Scope(&EnvironmentLock);
+				EnvironmentInfo = Info;
+			}
+			UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Environment: GitAvailable=%s GitVersion=\"%s\" LfsAvailable=%s LfsVersion=\"%s\" User=\"%s\" Email=\"%s\""),
+				Info.bGitAvailable ? TEXT("true") : TEXT("false"),
+				*Info.GitVersion,
+				Info.bGitLfsAvailable ? TEXT("true") : TEXT("false"),
+				*Info.GitLfsVersion,
+				*Info.UserName,
+				*Info.UserEmail);
+		}
+		else
+		{
+			UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: Environment validation timed out after %f seconds"), SyncTimeoutSeconds);
+		}
+		EnvironmentFuture = TFuture<FGitEnvironmentInfo>();
+	}
+
 	if (bForceConnection)
 	{
 		const FSourceControlOperationRef ConnectOp = ISourceControlOperation::Create<FConnect>();
