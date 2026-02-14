@@ -70,6 +70,9 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 	const FString Params = BuildCommandLine(Request.Arguments);
 	uint32 ProcessId = 0;
 
+	UE_LOG(LogSourceControl, Verbose, TEXT("UnrealGit: Running git: executable='%s', args='%s', workdir='%s'"),
+		*GitExecutablePath, *Params, Request.WorkingDirectory.IsEmpty() ? TEXT("(null)") : *Request.WorkingDirectory);
+
 	FProcHandle Handle = FPlatformProcess::CreateProc(
 		*GitExecutablePath,
 		*Params,
@@ -85,7 +88,8 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 	if (!Handle.IsValid())
 	{
 		Result.ExitCode = -1;
-		const FString Error = FString::Printf(TEXT("Failed to launch git process: %s %s"), *GitExecutablePath, *Params);
+		const FString Error = FString::Printf(TEXT("Failed to launch git process: %s %s (workdir: %s)"), *GitExecutablePath, *Params, Request.WorkingDirectory.IsEmpty() ? TEXT("(null)") : *Request.WorkingDirectory);
+		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: %s"), *Error);
 		FTCHARToUTF8 Utf8(*Error);
 		Result.StdErr.Append(reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
 		Result.Duration = FTimespan::FromSeconds(FPlatformTime::Seconds() - StartSeconds);
@@ -135,6 +139,8 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 		ExitCode = Result.bWasCanceled ? -2 : -1;
 	}
 	Result.ExitCode = ExitCode;
+
+	UE_LOG(LogSourceControl, Verbose, TEXT("UnrealGit: git completed: exit=%d, duration=%.3fs"), ExitCode, Result.Duration.GetTotalSeconds());
 
 	Result.Duration = FTimespan::FromSeconds(FPlatformTime::Seconds() - StartSeconds);
 	return Result;

@@ -5,6 +5,8 @@
 #include "Features/IModularFeatures.h"
 #include "UnrealGit/SourceControl/UnrealGitSourceControlProvider.h"
 
+DEFINE_LOG_CATEGORY(LogUnrealGit);
+
 #define LOCTEXT_NAMESPACE "FUnrealGitModule"
 
 void FUnrealGitModule::StartupModule()

@@ -3,7 +3,9 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "UnrealGit.h"
 
+#include "Logging/LogMacros.h"
 #include "UnrealGit/Git/IGitProcessRunner.h"
 #include "UnrealGit/Git/Parsers/GitRevParseParser.h"
 
@@ -36,6 +38,7 @@ namespace UnrealGit::Workers
 		{
 			CurrentDir = FPaths::ProjectDir();
 		}
+		UE_LOG(LogUnrealGit, Log, TEXT("EnsureRepoRoot: Starting search from directory: '%s' (hint was: '%s')"), *CurrentDir, *WorkingDirectoryHint);
 		CurrentDir = FPaths::ConvertRelativePathToFull(CurrentDir);
 		FPaths::NormalizeDirectoryName(CurrentDir);
 
@@ -46,6 +49,7 @@ namespace UnrealGit::Workers
 		for (int32 Depth = 0; Depth < 32; ++Depth)
 		{
 			LastAttemptDir = CurrentDir;
+			UE_LOG(LogUnrealGit, Log, TEXT("EnsureRepoRoot: Attempting git rev-parse in: '%s'"), *CurrentDir);
 
 			FGitProcessRequest RootRequest;
 			RootRequest.WorkingDirectory = CurrentDir;
@@ -54,6 +58,9 @@ namespace UnrealGit::Workers
 			const FGitProcessResult RootResult = ProcessRunner->Run(RootRequest);
 			LastExitCode = RootResult.ExitCode;
 			LastStdErr = BytesToTextUtf8Lossy(RootResult.StdErr).TrimStartAndEnd();
+
+			UE_LOG(LogUnrealGit, Log, TEXT("EnsureRepoRoot: git rev-parse result: exit=%d, stdout='%s', stderr='%s'"), 
+				RootResult.ExitCode, *BytesToTextUtf8Lossy(RootResult.StdOut).TrimStartAndEnd(), *LastStdErr);
 
 			const FString RootStdOut = BytesToTextUtf8Lossy(RootResult.StdOut);
 			if (RootResult.ExitCode == 0 && FGitRevParseParser::ParseShowToplevel(RootStdOut, InOutRepoRoot))

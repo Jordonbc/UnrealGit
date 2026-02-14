@@ -313,9 +313,12 @@ void FUnrealGitSourceControlProvider::UnregisterSourceControlStateChanged_Handle
 
 FString FUnrealGitSourceControlProvider::GetWorkingDirectoryHint() const
 {
-	return Settings.RepositoryDiscoveryDirectory.IsEmpty()
-		? FPaths::ConvertRelativePathToFull(FPaths::ProjectDir())
-		: Settings.RepositoryDiscoveryDirectory;
+	if (!Settings.RepositoryDiscoveryDirectory.IsEmpty())
+	{
+		return Settings.RepositoryDiscoveryDirectory;
+	}
+
+	return FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 }
 
 void FUnrealGitSourceControlProvider::StartEnvironmentValidation()
