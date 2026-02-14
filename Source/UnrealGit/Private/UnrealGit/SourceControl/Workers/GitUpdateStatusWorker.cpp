@@ -37,8 +37,9 @@ void FGitUpdateStatusWorker::Execute(
 	}
 
 	FGitProcessRequest StatusRequest;
-	StatusRequest.WorkingDirectory = RepoRoot;
+	StatusRequest.WorkingDirectory = FString();
 	StatusRequest.Arguments = {
+		TEXT("-C"), *RepoRoot,
 		TEXT("status"),
 		TEXT("--porcelain=v2"),
 		TEXT("-z"),
@@ -89,8 +90,8 @@ void FGitUpdateStatusWorker::Execute(
 	if (Settings.bEnableLfsLocks && bQueryLfsLocks)
 	{
 		FGitProcessRequest LocksRequest;
-		LocksRequest.WorkingDirectory = RepoRoot;
-		LocksRequest.Arguments = { TEXT("lfs"), TEXT("locks"), TEXT("--json") };
+		LocksRequest.WorkingDirectory = FString();
+		LocksRequest.Arguments = { TEXT("-C"), *RepoRoot, TEXT("lfs"), TEXT("locks"), TEXT("--json") };
 
 		const FGitProcessResult LocksResult = ProcessRunner->Run(LocksRequest);
 		if (LocksResult.ExitCode == 0)

@@ -22,6 +22,18 @@ namespace UnrealGit::Workers
 		return FString(Converter.Length(), Converter.Get());
 	}
 
+	inline FGitProcessRequest MakeGitRequest(const FString& RepoRoot, const TArray<FString>& Arguments)
+	{
+		FGitProcessRequest Request;
+		Request.WorkingDirectory = FString();
+		Request.Arguments = { TEXT("-C"), *RepoRoot };
+		for (const FString& Arg : Arguments)
+		{
+			Request.Arguments.Add(Arg);
+		}
+		return Request;
+	}
+
 	inline bool EnsureRepoRoot(
 		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
 		const FString& WorkingDirectoryHint,
@@ -38,52 +50,33 @@ namespace UnrealGit::Workers
 		{
 			CurrentDir = FPaths::ProjectDir();
 		}
-		UE_LOG(LogUnrealGit, Log, TEXT("EnsureRepoRoot: Starting search from directory: '%s' (hint was: '%s')"), *CurrentDir, *WorkingDirectoryHint);
+		UE_LOG(LogUnrealGit, Log, TEXT("EnsureRepoRoot: Searching from directory: '%s'"), *CurrentDir);
 		CurrentDir = FPaths::ConvertRelativePathToFull(CurrentDir);
 		FPaths::NormalizeDirectoryName(CurrentDir);
 
-		int32 LastExitCode = INDEX_NONE;
-		FString LastStdErr;
-		FString LastAttemptDir;
+		FGitProcessRequest RootRequest;
+		RootRequest.WorkingDirectory = FString();
+		RootRequest.Arguments = { TEXT("-C"), *CurrentDir, TEXT("rev-parse"), TEXT("--show-toplevel") };
 
-		for (int32 Depth = 0; Depth < 32; ++Depth)
+		const FGitProcessResult RootResult = ProcessRunner->Run(RootRequest);
+		const FString StdErr = BytesToTextUtf8Lossy(RootResult.StdErr).TrimStartAndEnd();
+		const FString StdOut = BytesToTextUtf8Lossy(RootResult.StdOut);
+
+		UE_LOG(LogUnrealGit, Log, TEXT("EnsureRepoRoot: git -C rev-parse result: exit=%d, stdout='%s', stderr='%s'"), 
+			RootResult.ExitCode, *StdOut.TrimStartAndEnd(), *StdErr);
+
+		if (RootResult.ExitCode == 0 && FGitRevParseParser::ParseShowToplevel(StdOut, InOutRepoRoot))
 		{
-			LastAttemptDir = CurrentDir;
-			UE_LOG(LogUnrealGit, Log, TEXT("EnsureRepoRoot: Attempting git rev-parse in: '%s'"), *CurrentDir);
-
-			FGitProcessRequest RootRequest;
-			RootRequest.WorkingDirectory = CurrentDir;
-			RootRequest.Arguments = { TEXT("rev-parse"), TEXT("--show-toplevel") };
-
-			const FGitProcessResult RootResult = ProcessRunner->Run(RootRequest);
-			LastExitCode = RootResult.ExitCode;
-			LastStdErr = BytesToTextUtf8Lossy(RootResult.StdErr).TrimStartAndEnd();
-
-			UE_LOG(LogUnrealGit, Log, TEXT("EnsureRepoRoot: git rev-parse result: exit=%d, stdout='%s', stderr='%s'"), 
-				RootResult.ExitCode, *BytesToTextUtf8Lossy(RootResult.StdOut).TrimStartAndEnd(), *LastStdErr);
-
-			const FString RootStdOut = BytesToTextUtf8Lossy(RootResult.StdOut);
-			if (RootResult.ExitCode == 0 && FGitRevParseParser::ParseShowToplevel(RootStdOut, InOutRepoRoot))
-			{
-				return true;
-			}
-
-			const FString ParentDir = FPaths::GetPath(CurrentDir);
-			if (ParentDir.IsEmpty() || ParentDir == CurrentDir)
-			{
-				break;
-			}
-
-			CurrentDir = ParentDir;
+			return true;
 		}
 
 		if (OutError)
 		{
-			const FString Err = LastStdErr.IsEmpty()
-				? FString::Printf(TEXT("Git repository root could not be determined from \"%s\" (last attempt: \"%s\", exit code: %d)."),
-					*WorkingDirectoryHint, *LastAttemptDir, LastExitCode)
-				: FString::Printf(TEXT("Git repository root could not be determined from \"%s\" (last attempt: \"%s\", exit code: %d, stderr: %s)."),
-					*WorkingDirectoryHint, *LastAttemptDir, LastExitCode, *LastStdErr);
+			const FString Err = StdErr.IsEmpty()
+				? FString::Printf(TEXT("Git repository root could not be determined from \"%s\" (exit code: %d)."),
+					*CurrentDir, RootResult.ExitCode)
+				: FString::Printf(TEXT("Git repository root could not be determined from \"%s\" (exit code: %d, stderr: %s)."),
+					*CurrentDir, RootResult.ExitCode, *StdErr);
 			*OutError = Err;
 		}
 
