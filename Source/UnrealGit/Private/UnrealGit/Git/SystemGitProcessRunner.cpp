@@ -76,7 +76,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 	FProcHandle Handle = FPlatformProcess::CreateProc(
 		*GitExecutablePath,
 		*Params,
-		/*bLaunchDetached*/ true,
+		/*bLaunchDetached*/ false,
 		/*bLaunchHidden*/ true,
 		/*bLaunchReallyHidden*/ true,
 		&ProcessId,
