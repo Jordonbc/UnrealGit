@@ -83,7 +83,8 @@ void FGitCheckInWorker::Execute(
 
 	const FString TempDir = FPaths::Combine(FPaths::ProjectIntermediateDir(), TEXT("UnrealGit"));
 	IFileManager::Get().MakeDirectory(*TempDir, true);
-	const FString MessageFile = FPaths::CreateTempFilename(*TempDir, TEXT("CommitMessage_"), TEXT(".txt"));
+	FString MessageFile = FPaths::CreateTempFilename(*TempDir, TEXT("CommitMessage_"), TEXT(".txt"));
+	MessageFile = FPaths::ConvertRelativePathToFull(MessageFile);
 
 	TArray<uint8> Utf8Bytes;
 	{
