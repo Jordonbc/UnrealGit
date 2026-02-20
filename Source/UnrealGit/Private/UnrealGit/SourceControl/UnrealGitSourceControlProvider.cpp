@@ -57,15 +57,10 @@ struct FUnrealGitSourceControlProvider::FCommand final
 
 	TUniquePtr<IGitSourceControlWorker> Worker;
 	TFuture<FUnrealGitWorkerOutput> Future;
-
+	
 	FUnrealGitProviderSettings ProviderSettings;
 	bool bQueryLfsLocks = false;
 };
-
-static bool IsOperationSynchronousOnGameThread(EConcurrency::Type Concurrency)
-{
-	return Concurrency == EConcurrency::Synchronous && IsInGameThread();
-}
 
 FUnrealGitSourceControlProvider::FUnrealGitSourceControlProvider() = default;
 
@@ -414,13 +409,6 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	const FSourceControlOperationComplete& InOperationCompleteDelegate)
 {
 	const FName OpName = InOperation->GetName();
-
-	if (IsOperationSynchronousOnGameThread(InConcurrency) && OpName != "Connect")
-	{
-		LastErrorText = FText::FromString(TEXT("UnrealGit does not execute synchronous operations on the game thread."));
-		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Execute(%s) failed: %s"), *OpName.ToString(), *LastErrorText.ToString());
-		return ECommandResult::Failed;
-	}
 
 	if (!ProcessRunner.IsValid())
 	{
