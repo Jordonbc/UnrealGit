@@ -503,7 +503,7 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 		Commands.Add(Command);
 	}
 
-	UE_LOG(LogSourceControl, Verbose, TEXT("UnrealGit: Queued operation %s (files=%d, concurrency=%s)"),
+	UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: Queued operation %s (files=%d, concurrency=%s)"),
 		*OpName.ToString(),
 		InFiles.Num(),
 		InConcurrency == EConcurrency::Synchronous ? TEXT("Sync") : TEXT("Async"));
@@ -701,7 +701,7 @@ void FUnrealGitSourceControlProvider::Tick()
 		bool bAnyStateChanged = false;
 		const FString OperationName = Command->Operation->GetName().ToString();
 
-		UE_LOG(LogUnrealGit, Verbose, TEXT("Tick: Processing completed operation '%s', bSuccess=%d, HasStatusSnapshot=%d, Files=%d"), 
+		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("Tick: Processing completed operation '%s', bSuccess=%d, HasStatusSnapshot=%d, Files=%d"), 
 			*OperationName, Output.bSuccess ? 1 : 0, Output.StatusSnapshot.IsSet() ? 1 : 0, Command->Files.Num());
 
 		if (Output.RepoRoot.IsSet())

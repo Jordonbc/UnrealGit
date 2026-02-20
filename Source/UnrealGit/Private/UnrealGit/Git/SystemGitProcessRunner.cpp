@@ -79,7 +79,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 		const FString IndexLockPath = FPaths::Combine(Request.RepoRoot, TEXT(".git"), TEXT("index.lock"));
 		if (IFileManager::Get().FileExists(*IndexLockPath))
 		{
-			UE_LOG(LogSourceControl, Verbose, TEXT("UnrealGit: Removing stale index.lock file"));
+			UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: Removing stale index.lock file"));
 			IFileManager::Get().Delete(*IndexLockPath, false, true, true);
 		}
 	}
@@ -87,7 +87,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 	const FString Params = BuildCommandLine(FinalArguments);
 	uint32 ProcessId = 0;
 
-	UE_LOG(LogSourceControl, Verbose, TEXT("UnrealGit: Running git: executable='%s', args='%s', workdir='%s'"),
+	UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: Running git: executable='%s', args='%s', workdir='%s'"),
 		*GitExecutablePath, *Params, Request.WorkingDirectory.IsEmpty() ? TEXT("(null)") : *Request.WorkingDirectory);
 
 	FProcHandle Handle = FPlatformProcess::CreateProc(
@@ -157,7 +157,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 	}
 	Result.ExitCode = ExitCode;
 
-	UE_LOG(LogSourceControl, Verbose, TEXT("UnrealGit: git completed: exit=%d, duration=%.3fs"), ExitCode, Result.Duration.GetTotalSeconds());
+	UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: git completed: exit=%d, duration=%.3fs"), ExitCode, Result.Duration.GetTotalSeconds());
 
 	Result.Duration = FTimespan::FromSeconds(FPlatformTime::Seconds() - StartSeconds);
 	return Result;

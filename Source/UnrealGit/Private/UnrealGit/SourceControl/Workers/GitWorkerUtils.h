@@ -122,7 +122,7 @@ namespace UnrealGit::Workers
 	{
 		if (RepoRoot.IsEmpty())
 		{
-			UE_LOG(LogUnrealGit, Verbose, TEXT("TryMakeRepoRelativePath: FAIL - RepoRoot is empty. Absolute='%s'"), *AbsolutePath);
+			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("TryMakeRepoRelativePath: FAIL - RepoRoot is empty. Absolute='%s'"), *AbsolutePath);
 			return false;
 		}
 
@@ -130,7 +130,7 @@ namespace UnrealGit::Workers
 		FString Rel = Abs;
 		if (!FPaths::MakePathRelativeTo(Rel, *RepoRoot))
 		{
-			UE_LOG(LogUnrealGit, Verbose, TEXT("TryMakeRepoRelativePath: FAIL - MakePathRelativeTo failed. Abs='%s', RepoRoot='%s'"), *Abs, *RepoRoot);
+			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("TryMakeRepoRelativePath: FAIL - MakePathRelativeTo failed. Abs='%s', RepoRoot='%s'"), *Abs, *RepoRoot);
 			return false;
 		}
 
@@ -142,11 +142,11 @@ namespace UnrealGit::Workers
 
 		if (Rel.IsEmpty() || Rel == TEXT("..") || Rel.StartsWith(TEXT("../")) || Rel.Contains(TEXT("/../")))
 		{
-			UE_LOG(LogUnrealGit, Verbose, TEXT("TryMakeRepoRelativePath: FAIL - Validation failed. Rel='%s'"), *Rel);
+			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("TryMakeRepoRelativePath: FAIL - Validation failed. Rel='%s'"), *Rel);
 			return false;
 		}
 
-		UE_LOG(LogUnrealGit, Verbose, TEXT("TryMakeRepoRelativePath: SUCCESS - '%s' -> '%s'"), *Abs, *Rel);
+		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("TryMakeRepoRelativePath: SUCCESS - '%s' -> '%s'"), *Abs, *Rel);
 		OutRelative = MoveTemp(Rel);
 		return true;
 	}

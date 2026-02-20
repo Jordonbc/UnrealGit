@@ -49,7 +49,7 @@ void FGitUpdateStatusWorker::Execute(
 	};
 
 	// Use pathspecs when specific files are requested to reduce work.
-	UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Received Files.Num()=%d"), Files.Num());
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Received Files.Num()=%d"), Files.Num());
 	if (Files.Num() > 0)
 	{
 		TArray<FString> RepoRelativePaths;
@@ -64,7 +64,7 @@ void FGitUpdateStatusWorker::Execute(
 			}
 		}
 
-		UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Converted to %d relative paths"), RepoRelativePaths.Num());
+		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Converted to %d relative paths"), RepoRelativePaths.Num());
 
 		if (RepoRelativePaths.Num() > 0)
 		{
@@ -107,7 +107,7 @@ void FGitUpdateStatusWorker::Execute(
 
 	if (Files.Num() == 0)
 	{
-		UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Full repo query - fetching all tracked files with git ls-files"));
+		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Full repo query - fetching all tracked files with git ls-files"));
 		FGitProcessRequest LsFilesRequest;
 		LsFilesRequest.WorkingDirectory = FString();
 		LsFilesRequest.RepoRoot = RepoRoot;
@@ -120,7 +120,7 @@ void FGitUpdateStatusWorker::Execute(
 		if (LsFilesResult.ExitCode == 0)
 		{
 			TArray<FString> AllTrackedPaths = UnrealGit::Workers::ParseNullDelimitedList(LsFilesResult.StdOut);
-			UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: git ls-files found %d tracked files"), AllTrackedPaths.Num());
+			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: git ls-files found %d tracked files"), AllTrackedPaths.Num());
 
 			TSet<FString> TrackedSet;
 			for (const FString& Path : AllTrackedPaths)
@@ -144,11 +144,11 @@ void FGitUpdateStatusWorker::Execute(
 					AddedCount++;
 				}
 			}
-			UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Added %d Unchanged entries from ls-files"), AddedCount);
+			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Added %d Unchanged entries from ls-files"), AddedCount);
 		}
 	}
 
-	UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Parsed %d files from git status"), Snapshot.Files.Num());
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Parsed %d files from git status"), Snapshot.Files.Num());
 
 	TArray<FString> RepoRelativePathsNotInStatus;
 	if (Files.Num() > 0)
@@ -166,11 +166,11 @@ void FGitUpdateStatusWorker::Execute(
 			}
 		}
 	}
-	UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: %d files not in status, checking if tracked"), RepoRelativePathsNotInStatus.Num());
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: %d files not in status, checking if tracked"), RepoRelativePathsNotInStatus.Num());
 
 	if (RepoRelativePathsNotInStatus.Num() > 0)
 	{
-		UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Running git ls-files for %d files"), RepoRelativePathsNotInStatus.Num());
+		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Running git ls-files for %d files"), RepoRelativePathsNotInStatus.Num());
 		FGitProcessRequest LsFilesRequest;
 		LsFilesRequest.WorkingDirectory = FString();
 		LsFilesRequest.RepoRoot = RepoRoot;
@@ -185,7 +185,7 @@ void FGitUpdateStatusWorker::Execute(
 		}
 
 		const FGitProcessResult LsFilesResult = ProcessRunner->Run(LsFilesRequest);
-		UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: git ls-files result: exit=%d, stdout_len=%d"), LsFilesResult.ExitCode, LsFilesResult.StdOut.Num());
+		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: git ls-files result: exit=%d, stdout_len=%d"), LsFilesResult.ExitCode, LsFilesResult.StdOut.Num());
 		if (LsFilesResult.ExitCode == 0)
 		{
 			TArray<FString> TrackedPaths = UnrealGit::Workers::ParseNullDelimitedList(LsFilesResult.StdOut);
@@ -195,7 +195,7 @@ void FGitUpdateStatusWorker::Execute(
 			{
 				TrackedSet.Add(Path);
 			}
-			UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: ls-files found %d tracked paths"), TrackedSet.Num());
+			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: ls-files found %d tracked paths"), TrackedSet.Num());
 
 			int32 UnchangedCount = 0;
 			for (const FString& Relative : RepoRelativePathsNotInStatus)
@@ -213,7 +213,7 @@ void FGitUpdateStatusWorker::Execute(
 					UnchangedCount++;
 				}
 			}
-			UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Added %d Unchanged entries to snapshot"), UnchangedCount);
+			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Added %d Unchanged entries to snapshot"), UnchangedCount);
 		}
 		else
 		{
@@ -221,7 +221,7 @@ void FGitUpdateStatusWorker::Execute(
 		}
 	}
 
-	UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Final snapshot has %d files"), Snapshot.Files.Num());
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Final snapshot has %d files"), Snapshot.Files.Num());
 	OutOutput.bSuccess = true;
 	OutOutput.StatusSnapshot = MoveTemp(Snapshot);
 	OutOutput.RepoRoot = RepoRoot;

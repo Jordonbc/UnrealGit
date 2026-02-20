@@ -51,11 +51,11 @@ void FGitMarkForAddWorker::Execute(
 		AddRequest.Arguments.Add(Relative);
 	}
 
-	UE_LOG(LogUnrealGit, Verbose, TEXT("MarkForAdd: Running git add with WorkingDirectory='%s', args='%s'"), 
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("MarkForAdd: Running git add with WorkingDirectory='%s', args='%s'"), 
 		*AddRequest.WorkingDirectory, *FString::Join(AddRequest.Arguments, TEXT(" ")));
 
 	const FGitProcessResult AddResult = ProcessRunner->Run(AddRequest);
-	UE_LOG(LogUnrealGit, Verbose, TEXT("MarkForAdd: git add result: exit=%d, stdout='%s', stderr='%s'"), 
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("MarkForAdd: git add result: exit=%d, stdout='%s', stderr='%s'"), 
 		AddResult.ExitCode, 
 		*UnrealGit::Workers::BytesToTextUtf8Lossy(AddResult.StdOut).Left(200),
 		*UnrealGit::Workers::BytesToTextUtf8Lossy(AddResult.StdErr).Left(200));
