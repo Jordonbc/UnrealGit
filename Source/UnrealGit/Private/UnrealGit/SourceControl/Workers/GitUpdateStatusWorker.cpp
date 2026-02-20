@@ -104,6 +104,50 @@ void FGitUpdateStatusWorker::Execute(
 	{
 		FoundRelativePaths.Add(FileStatus.RelativePath);
 	}
+
+	if (Files.Num() == 0)
+	{
+		UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Full repo query - fetching all tracked files with git ls-files"));
+		FGitProcessRequest LsFilesRequest;
+		LsFilesRequest.WorkingDirectory = FString();
+		LsFilesRequest.Arguments = {
+			TEXT("-C"), *RepoRoot,
+			TEXT("ls-files"),
+			TEXT("-z"),
+		};
+
+		const FGitProcessResult LsFilesResult = ProcessRunner->Run(LsFilesRequest);
+		if (LsFilesResult.ExitCode == 0)
+		{
+			TArray<FString> AllTrackedPaths = UnrealGit::Workers::ParseNullDelimitedList(LsFilesResult.StdOut);
+			UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: git ls-files found %d tracked files"), AllTrackedPaths.Num());
+
+			TSet<FString> TrackedSet;
+			for (const FString& Path : AllTrackedPaths)
+			{
+				TrackedSet.Add(Path);
+			}
+
+			int32 AddedCount = 0;
+			for (const FString& TrackedPath : AllTrackedPaths)
+			{
+				if (!FoundRelativePaths.Contains(TrackedPath))
+				{
+					FGitFileStatus UnchangedStatus;
+					UnchangedStatus.RelativePath = TrackedPath;
+					UnchangedStatus.State = EGitFileState::Unchanged;
+					UnchangedStatus.bIsTracked = true;
+					UnchangedStatus.bIsStaged = false;
+					UnchangedStatus.bIsUnstaged = false;
+					UnchangedStatus.bIsConflicted = false;
+					Snapshot.Files.Add(MoveTemp(UnchangedStatus));
+					AddedCount++;
+				}
+			}
+			UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Added %d Unchanged entries from ls-files"), AddedCount);
+		}
+	}
+
 	UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Parsed %d files from git status"), Snapshot.Files.Num());
 
 	TArray<FString> RepoRelativePathsNotInStatus;
