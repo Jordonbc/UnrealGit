@@ -265,14 +265,31 @@ ECommandResult::Type FUnrealGitSourceControlProvider::GetState(const TArray<FStr
 	TArray<FString> AbsFiles;
 	AbsFiles.Reserve(InFiles.Num());
 
+	bool bAnyInvalid = false;
 	for (const FString& File : InFiles)
 	{
 		const FString Abs = FPaths::ConvertRelativePathToFull(File);
-		OutState.Add(GetOrCreateStateInternal(Abs));
+		FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
+		OutState.Add(StateRef);
 		AbsFiles.Add(Abs);
+
+		// Check if this state needs updating - use public IsUnknown() method
+		if (StateRef->IsUnknown())
+		{
+			bAnyInvalid = true;
+		}
 	}
 
-	if (InStateCacheUsage == EStateCacheUsage::ForceUpdate)
+	// Only trigger async update if:
+	// 1. ForceUpdate is requested, OR
+	// 2. Some files have unknown states AND no update is already in progress
+	bool bUpdateInProgress = false;
+	{
+		FScopeLock Lock(&CommandLock);
+		bUpdateInProgress = Commands.Num() > 0;
+	}
+
+	if ((InStateCacheUsage == EStateCacheUsage::ForceUpdate || bAnyInvalid) && !bUpdateInProgress && !RepoRoot.IsEmpty())
 	{
 		const FSourceControlOperationRef UpdateOp = ISourceControlOperation::Create<FUpdateStatus>();
 		Execute(UpdateOp, nullptr, AbsFiles, EConcurrency::Asynchronous, FSourceControlOperationComplete());
