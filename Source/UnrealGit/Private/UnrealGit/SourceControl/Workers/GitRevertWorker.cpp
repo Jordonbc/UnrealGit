@@ -34,7 +34,7 @@ void FGitRevertWorker::Execute(
 	RestoreRequest.WorkingDirectory = FString();
 	RestoreRequest.RepoRoot = RepoRoot;
 	RestoreRequest.bSynchronous = true;
-	RestoreRequest.Arguments = { TEXT("restore"), TEXT("--staged"), TEXT("--worktree"), TEXT("--") };
+	RestoreRequest.Arguments = { TEXT("restore"), TEXT("--worktree") };
 
 	for (const FString& AbsolutePath : Files)
 	{
@@ -44,6 +44,10 @@ void FGitRevertWorker::Execute(
 			OutOutput.bSuccess = false;
 			OutOutput.ErrorText = FText::FromString(TEXT("File is outside the Git repository root."));
 			return;
+		}
+		if (RestoreRequest.Arguments.Num() == 2)
+		{
+			RestoreRequest.Arguments.Add(TEXT("--"));
 		}
 		RestoreRequest.Arguments.Add(Relative);
 	}
