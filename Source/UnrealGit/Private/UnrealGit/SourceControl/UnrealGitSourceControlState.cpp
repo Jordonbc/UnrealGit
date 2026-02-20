@@ -101,6 +101,11 @@ FSlateIcon FUnrealGitSourceControlState::GetIcon() const
 		return FSlateIcon(StyleSet, "Plastic.Ignored");
 	}
 
+	if (FileState == EGitFileState::Unchanged)
+	{
+		return FSlateIcon();
+	}
+
 	return FSlateIcon(StyleSet, "SourceControl.StatusIcon.Unknown");
 }
 #endif // SOURCE_CONTROL_WITH_SLATE

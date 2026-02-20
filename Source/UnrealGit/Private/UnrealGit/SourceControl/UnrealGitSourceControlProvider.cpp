@@ -589,6 +589,8 @@ TOptional<int> FUnrealGitSourceControlProvider::GetNumLocalChanges() const
 
 void FUnrealGitSourceControlProvider::UpdateStatesFromStatusSnapshot(const FGitStatusSnapshot& Snapshot, const TArray<FString>& RequestedFiles)
 {
+	UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatesFromStatusSnapshot: Snapshot has %d files, RequestedFiles has %d"), Snapshot.Files.Num(), RequestedFiles.Num());
+
 	TSet<FString> RequestedSet;
 	for (const FString& File : RequestedFiles)
 	{
@@ -600,6 +602,7 @@ void FUnrealGitSourceControlProvider::UpdateStatesFromStatusSnapshot(const FGitS
 		const FString Abs = FPaths::ConvertRelativePathToFull(RepoRoot / FileStatus.RelativePath);
 		FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
 		StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->UpdateFromStatus(FileStatus);
+		UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatesFromStatusSnapshot: Updated state for '%s' to state %d"), *Abs, (int32)FileStatus.State);
 	}
 
 	// Ensure explicitly requested files have state objects even if not returned by the status snapshot.
@@ -693,6 +696,9 @@ void FUnrealGitSourceControlProvider::Tick()
 		bool bAnyStateChanged = false;
 		const FString OperationName = Command->Operation->GetName().ToString();
 
+		UE_LOG(LogUnrealGit, Verbose, TEXT("Tick: Processing completed operation '%s', bSuccess=%d, HasStatusSnapshot=%d, Files=%d"), 
+			*OperationName, Output.bSuccess ? 1 : 0, Output.StatusSnapshot.IsSet() ? 1 : 0, Command->Files.Num());
+
 		if (Output.RepoRoot.IsSet())
 		{
 			RepoRoot = Output.RepoRoot.GetValue();
@@ -700,6 +706,7 @@ void FUnrealGitSourceControlProvider::Tick()
 
 		if (Output.bSuccess && Output.StatusSnapshot.IsSet())
 		{
+			UE_LOG(LogUnrealGit, Verbose, TEXT("Tick: Calling UpdateStatesFromStatusSnapshot with %d files"), Output.StatusSnapshot.GetValue().Files.Num());
 			UpdateStatesFromStatusSnapshot(Output.StatusSnapshot.GetValue(), Command->Files);
 			LastErrorText = FText::GetEmpty();
 			bAnyStateChanged = true;
