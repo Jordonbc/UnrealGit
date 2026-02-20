@@ -25,7 +25,5 @@ private:
 	FString GitExecutablePath;
 
 	static FString BuildCommandLine(const TArray<FString>& Arguments);
-
-	static FCriticalSection SynchronousOpLock;
 };
 

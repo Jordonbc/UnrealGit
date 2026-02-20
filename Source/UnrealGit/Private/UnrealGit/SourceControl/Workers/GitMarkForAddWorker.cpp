@@ -33,7 +33,6 @@ void FGitMarkForAddWorker::Execute(
 	FGitProcessRequest AddRequest;
 	AddRequest.WorkingDirectory = FString();
 	AddRequest.RepoRoot = RepoRoot;
-	AddRequest.bSynchronous = true;
 	AddRequest.Arguments = {
 		TEXT("add"),
 		TEXT("-N"),

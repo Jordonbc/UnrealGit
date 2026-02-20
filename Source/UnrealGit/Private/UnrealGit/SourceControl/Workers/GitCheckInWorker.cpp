@@ -46,7 +46,6 @@ void FGitCheckInWorker::Execute(
 	FGitProcessRequest AddRequest;
 	AddRequest.WorkingDirectory = FString();
 	AddRequest.RepoRoot = RepoRoot;
-	AddRequest.bSynchronous = true;
 	AddRequest.Arguments = {
 		TEXT("add"),
 		TEXT("-A"),
@@ -108,7 +107,6 @@ void FGitCheckInWorker::Execute(
 	FGitProcessRequest CommitRequest;
 	CommitRequest.WorkingDirectory = FString();
 	CommitRequest.RepoRoot = RepoRoot;
-	CommitRequest.bSynchronous = true;
 	CommitRequest.Arguments = { TEXT("commit"), TEXT("-F"), MessageFile };
 
 	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("CheckIn: Running git commit with message file: %s"), *MessageFile);
@@ -135,7 +133,6 @@ void FGitCheckInWorker::Execute(
 		FGitProcessRequest PushRequest;
 		PushRequest.WorkingDirectory = FString();
 		PushRequest.RepoRoot = RepoRoot;
-		PushRequest.bSynchronous = true;
 		PushRequest.Arguments = { TEXT("push") };
 		const FGitProcessResult PushResult = ProcessRunner->Run(PushRequest);
 		if (PushResult.ExitCode != 0)

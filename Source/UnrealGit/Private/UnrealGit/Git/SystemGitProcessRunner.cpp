@@ -7,8 +7,6 @@
 #include "Misc/ScopeExit.h"
 #include "ISourceControlModule.h"
 
-FCriticalSection FSystemGitProcessRunner::SynchronousOpLock;
-
 namespace
 {
 	FString BytesToTextUtf8Lossy(const TArray<uint8>& Bytes)
@@ -64,16 +62,7 @@ FString FSystemGitProcessRunner::BuildCommandLine(const TArray<FString>& Argumen
 
 FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request)
 {
-	if (!Request.bSynchronous)
-	{
-		check(!IsInGameThread());
-	}
-
-	TUniquePtr<FScopeLock> SyncLock;
-	if (Request.bSynchronous)
-	{
-		SyncLock = MakeUnique<FScopeLock>(&SynchronousOpLock);
-	}
+	check(!IsInGameThread());
 
 	FGitProcessResult Result;
 	const double StartSeconds = FPlatformTime::Seconds();

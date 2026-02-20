@@ -49,7 +49,6 @@ void FGitCheckOutWorker::Execute(
 			FGitProcessRequest LockRequest;
 			LockRequest.WorkingDirectory = FString();
 			LockRequest.RepoRoot = RepoRoot;
-			LockRequest.bSynchronous = true;
 			LockRequest.Arguments = { TEXT("lfs"), TEXT("lock"), TEXT("--"), Relative };
 			ProcessRunner->Run(LockRequest);
 		}
