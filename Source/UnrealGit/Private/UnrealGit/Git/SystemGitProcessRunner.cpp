@@ -2,6 +2,7 @@
 
 #include "UnrealGit/Private/UnrealGit/Git/SystemGitProcessRunner.h"
 
+#include "HAL/FileManager.h"
 #include "HAL/PlatformProcess.h"
 #include "Misc/ScopeExit.h"
 #include "ISourceControlModule.h"
@@ -73,6 +74,14 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 	{
 		FinalArguments.Insert(TEXT("-C"), 0);
 		FinalArguments.Insert(Request.RepoRoot, 1);
+
+		// Clean up any stale index.lock file to prevent "Another git process" errors
+		const FString IndexLockPath = FPaths::Combine(Request.RepoRoot, TEXT(".git"), TEXT("index.lock"));
+		if (IFileManager::Get().FileExists(*IndexLockPath))
+		{
+			UE_LOG(LogSourceControl, Verbose, TEXT("UnrealGit: Removing stale index.lock file"));
+			IFileManager::Get().Delete(*IndexLockPath, false, true, true);
+		}
 	}
 
 	const FString Params = BuildCommandLine(FinalArguments);
