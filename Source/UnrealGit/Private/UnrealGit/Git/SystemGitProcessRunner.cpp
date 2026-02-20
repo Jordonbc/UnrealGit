@@ -64,7 +64,10 @@ FString FSystemGitProcessRunner::BuildCommandLine(const TArray<FString>& Argumen
 
 FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request)
 {
-	check(!IsInGameThread());
+	if (!Request.bSynchronous)
+	{
+		check(!IsInGameThread());
+	}
 
 	TUniquePtr<FScopeLock> SyncLock;
 	if (Request.bSynchronous)
