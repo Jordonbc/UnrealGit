@@ -153,7 +153,7 @@ namespace UnrealGit::Workers
 	}
 
 	inline bool TryFixCorruptedIndex(
-		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
+		const TSharedPtr<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
 		const FString& RepoRoot)
 	{
 		const FString IndexPath = FPaths::Combine(RepoRoot, TEXT(".git"), TEXT("index"));
