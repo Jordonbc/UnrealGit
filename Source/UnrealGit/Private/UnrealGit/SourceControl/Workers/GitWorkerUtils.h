@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "UnrealGit.h"
 
+#include "HAL/FileManager.h"
 #include "Logging/LogMacros.h"
 #include "UnrealGit/Git/IGitProcessRunner.h"
 #include "UnrealGit/Git/Parsers/GitRevParseParser.h"
@@ -149,5 +150,34 @@ namespace UnrealGit::Workers
 		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("TryMakeRepoRelativePath: SUCCESS - '%s' -> '%s'"), *Abs, *Rel);
 		OutRelative = MoveTemp(Rel);
 		return true;
+	}
+
+	inline bool TryFixCorruptedIndex(
+		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
+		const FString& RepoRoot)
+	{
+		const FString IndexPath = FPaths::Combine(RepoRoot, TEXT(".git"), TEXT("index"));
+		if (!IFileManager::Get().FileExists(*IndexPath))
+		{
+			return false;
+		}
+
+		UE_LOG(LogUnrealGit, Warning, TEXT("Detected corrupted git index, attempting to rebuild..."));
+
+		IFileManager::Get().Delete(*IndexPath, false, true, true);
+
+		FGitProcessRequest Request;
+		Request.RepoRoot = RepoRoot;
+		Request.Arguments = { TEXT("reset") };
+
+		const FGitProcessResult Result = ProcessRunner->Run(Request);
+		if (Result.ExitCode == 0)
+		{
+			UE_LOG(LogUnrealGit, Log, TEXT("Successfully rebuilt git index"));
+			return true;
+		}
+
+		UE_LOG(LogUnrealGit, Error, TEXT("Failed to rebuild git index: %s"), *BytesToTextUtf8Lossy(Result.StdErr));
+		return false;
 	}
 }
