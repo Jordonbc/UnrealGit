@@ -18,6 +18,7 @@
 #include "UnrealGit/SourceControl/Workers/GitCheckInWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitCheckOutWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitGetHistoryWorker.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitLockWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitMarkForAddWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitRevertWorker.h"
@@ -720,6 +721,17 @@ void FUnrealGitSourceControlProvider::Tick()
 		{
 			LastErrorText = Output.ErrorText;
 			UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Operation %s failed: %s"), *OperationName, *LastErrorText.ToString());
+
+			const FString ErrorStr = LastErrorText.ToString();
+			if (ErrorStr.Contains(TEXT("index file smaller than expected")) || ErrorStr.Contains(TEXT("index file corrupt")))
+			{
+				UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: Detected corrupted index, attempting auto-recovery..."));
+				if (UnrealGit::Workers::TryFixCorruptedIndex(ProcessRunner, RepoRoot))
+				{
+					LastErrorText = FText::FromString(TEXT("Corrupted index was rebuilt. Please retry the operation."));
+					UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Successfully recovered from corrupted index. User should retry the operation."));
+				}
+			}
 		}
 
 		if (Output.bSuccess && Output.bHasLfsLocks)
