@@ -77,7 +77,7 @@ void FGitUpdateStatusWorker::Execute(
 	}
 
 	const FGitProcessResult StatusResult = ProcessRunner->Run(StatusRequest);
-	UE_LOG(LogUnrealGit, Log, TEXT("UpdateStatus: git status result: exit=%d, stdout_len=%d, stdout='%s', stderr='%s'"), 
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: git status result: exit=%d, stdout_len=%d, stdout='%s', stderr='%s'"), 
 		StatusResult.ExitCode, StatusResult.StdOut.Num(), 
 		*UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdOut).Left(500),
 		*UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdErr));
