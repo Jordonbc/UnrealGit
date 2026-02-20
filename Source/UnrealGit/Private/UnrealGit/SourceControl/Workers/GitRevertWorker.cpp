@@ -33,6 +33,7 @@ void FGitRevertWorker::Execute(
 	FGitProcessRequest RestoreRequest;
 	RestoreRequest.WorkingDirectory = FString();
 	RestoreRequest.RepoRoot = RepoRoot;
+	RestoreRequest.bSynchronous = true;
 	RestoreRequest.Arguments = { TEXT("restore"), TEXT("--staged"), TEXT("--worktree"), TEXT("--") };
 
 	for (const FString& AbsolutePath : Files)

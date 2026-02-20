@@ -88,6 +88,8 @@ private:
 	mutable FCriticalSection CommandLock;
 	TArray<TSharedRef<FCommand, ESPMode::ThreadSafe>> Commands;
 
+	mutable FCriticalSection SyncOperationLock;
+
 	FString RepoRoot;
 	FText LastErrorText;
 	FUnrealGitProviderSettings Settings;

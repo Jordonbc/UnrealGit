@@ -30,6 +30,9 @@ struct FGitProcessRequest final
 
 	/** Optional timeout. If unset, the process is allowed to run until completion. */
 	TOptional<FTimespan> Timeout;
+
+	/** If true, this operation will be serialized with other synchronous operations to prevent concurrency issues. */
+	bool bSynchronous = false;
 };
 
 /**

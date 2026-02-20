@@ -7,6 +7,21 @@
 #include "Misc/ScopeExit.h"
 #include "ISourceControlModule.h"
 
+FCriticalSection FSystemGitProcessRunner::SynchronousOpLock;
+
+namespace
+{
+	FString BytesToTextUtf8Lossy(const TArray<uint8>& Bytes)
+	{
+		if (Bytes.Num() == 0)
+		{
+			return FString();
+		}
+		FUTF8ToTCHAR Converter(reinterpret_cast<const ANSICHAR*>(Bytes.GetData()), Bytes.Num());
+		return FString(Converter.Length(), Converter.Get());
+	}
+}
+
 FSystemGitProcessRunner::FSystemGitProcessRunner(FString InGitExecutablePath)
 	: GitExecutablePath(MoveTemp(InGitExecutablePath))
 {
@@ -50,6 +65,12 @@ FString FSystemGitProcessRunner::BuildCommandLine(const TArray<FString>& Argumen
 FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request)
 {
 	check(!IsInGameThread());
+
+	TUniquePtr<FScopeLock> SyncLock;
+	if (Request.bSynchronous)
+	{
+		SyncLock = MakeUnique<FScopeLock>(&SynchronousOpLock);
+	}
 
 	FGitProcessResult Result;
 	const double StartSeconds = FPlatformTime::Seconds();
@@ -156,6 +177,43 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 		ExitCode = Result.bWasCanceled ? -2 : -1;
 	}
 	Result.ExitCode = ExitCode;
+
+	const FString StdErr = BytesToTextUtf8Lossy(Result.StdErr);
+
+	if (ExitCode == 128 && StdErr.Contains(TEXT("index.lock")) && !Request.RepoRoot.IsEmpty())
+	{
+		UE_LOG(LogSourceControl, Verbose, TEXT("UnrealGit: index.lock conflict detected, retrying after brief delay..."));
+		FPlatformProcess::Sleep(0.1f);
+
+		IFileManager::Get().Delete(*FPaths::Combine(Request.RepoRoot, TEXT(".git"), TEXT("index.lock")), false, true, true);
+
+		Handle = FPlatformProcess::CreateProc(
+			*GitExecutablePath,
+			*Params,
+			false, true, true,
+			&ProcessId, 0,
+			Request.WorkingDirectory.IsEmpty() ? nullptr : *Request.WorkingDirectory,
+			StdOutWritePipe,
+			StdErrWritePipe);
+
+		if (Handle.IsValid())
+		{
+			while (FPlatformProcess::IsProcRunning(Handle))
+			{
+				ReadAllAvailable(StdOutReadPipe, Result.StdOut);
+				ReadAllAvailable(StdErrReadPipe, Result.StdErr);
+				FPlatformProcess::Sleep(0.01f);
+			}
+			ReadAllAvailable(StdOutReadPipe, Result.StdOut);
+			ReadAllAvailable(StdErrReadPipe, Result.StdErr);
+
+			if (!FPlatformProcess::GetProcReturnCode(Handle, &ExitCode))
+			{
+				ExitCode = -1;
+			}
+			Result.ExitCode = ExitCode;
+		}
+	}
 
 	UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: git completed: exit=%d, duration=%.3fs"), ExitCode, Result.Duration.GetTotalSeconds());
 
