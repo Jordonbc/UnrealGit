@@ -19,6 +19,9 @@ struct FGitProcessRequest final
 	/** Git subcommand and arguments, excluding the git executable itself. Example: { "status", "--porcelain=v2" }. */
 	TArray<FString> Arguments;
 
+	/** Repository root - if set, automatically prepends "-C <RepoRoot>" to Arguments. */
+	FString RepoRoot;
+
 	/** Working directory for the git process (typically the repository root). */
 	FString WorkingDirectory;
 

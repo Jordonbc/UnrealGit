@@ -47,7 +47,8 @@ void FGitCheckOutWorker::Execute(
 		if (Settings.bEnableLfsLocks && Settings.bAutoLockOnCheckout)
 		{
 			FGitProcessRequest LockRequest;
-			LockRequest.WorkingDirectory = RepoRoot;
+			LockRequest.WorkingDirectory = FString();
+			LockRequest.RepoRoot = RepoRoot;
 			LockRequest.Arguments = { TEXT("lfs"), TEXT("lock"), TEXT("--"), Relative };
 			ProcessRunner->Run(LockRequest);
 		}

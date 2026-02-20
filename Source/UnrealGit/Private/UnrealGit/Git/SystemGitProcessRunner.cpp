@@ -67,7 +67,15 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 		FPlatformProcess::ClosePipe(StdErrReadPipe, StdErrWritePipe);
 	};
 
-	const FString Params = BuildCommandLine(Request.Arguments);
+	// If RepoRoot is set, automatically prepend "-C <RepoRoot>" to arguments
+	TArray<FString> FinalArguments = Request.Arguments;
+	if (!Request.RepoRoot.IsEmpty())
+	{
+		FinalArguments.Insert(TEXT("-C"), 0);
+		FinalArguments.Insert(Request.RepoRoot, 1);
+	}
+
+	const FString Params = BuildCommandLine(FinalArguments);
 	uint32 ProcessId = 0;
 
 	UE_LOG(LogSourceControl, Verbose, TEXT("UnrealGit: Running git: executable='%s', args='%s', workdir='%s'"),

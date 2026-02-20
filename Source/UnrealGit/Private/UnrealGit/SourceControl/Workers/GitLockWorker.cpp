@@ -48,7 +48,8 @@ void FGitLockWorker::Execute(
 		}
 
 		FGitProcessRequest LockRequest;
-		LockRequest.WorkingDirectory = RepoRoot;
+		LockRequest.WorkingDirectory = FString();
+		LockRequest.RepoRoot = RepoRoot;
 		LockRequest.Arguments = { TEXT("lfs"), TEXT("lock"), TEXT("--"), Relative };
 
 		const FGitProcessResult LockResult = ProcessRunner->Run(LockRequest);

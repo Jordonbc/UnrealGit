@@ -42,7 +42,8 @@ void FGitGetHistoryWorker::Execute(
 		}
 
 		FGitProcessRequest LogRequest;
-		LogRequest.WorkingDirectory = RepoRoot;
+		LogRequest.WorkingDirectory = FString();
+		LogRequest.RepoRoot = RepoRoot;
 		LogRequest.Arguments =
 		{
 			TEXT("--no-pager"),

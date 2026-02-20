@@ -44,8 +44,13 @@ void FGitCheckInWorker::Execute(
 	}
 
 	FGitProcessRequest AddRequest;
-	AddRequest.WorkingDirectory = RepoRoot;
-	AddRequest.Arguments = { TEXT("add"), TEXT("-A"), TEXT("--") };
+	AddRequest.WorkingDirectory = FString();
+	AddRequest.RepoRoot = RepoRoot;
+	AddRequest.Arguments = {
+		TEXT("add"),
+		TEXT("-A"),
+		TEXT("--")
+	};
 
 	for (const FString& AbsolutePath : Files)
 	{
@@ -59,7 +64,15 @@ void FGitCheckInWorker::Execute(
 		AddRequest.Arguments.Add(Relative);
 	}
 
+	UE_LOG(LogUnrealGit, Verbose, TEXT("CheckIn: Running git add with WorkingDirectory='%s', args='%s'"), 
+		*AddRequest.WorkingDirectory, *FString::Join(AddRequest.Arguments, TEXT(" ")));
+
 	const FGitProcessResult AddResult = ProcessRunner->Run(AddRequest);
+	UE_LOG(LogUnrealGit, Verbose, TEXT("CheckIn: git add result: exit=%d, stdout='%s', stderr='%s'"), 
+		AddResult.ExitCode, 
+		*UnrealGit::Workers::BytesToTextUtf8Lossy(AddResult.StdOut).Left(200),
+		*UnrealGit::Workers::BytesToTextUtf8Lossy(AddResult.StdErr).Left(200));
+
 	if (AddResult.ExitCode != 0)
 	{
 		OutOutput.bSuccess = false;
@@ -91,7 +104,8 @@ void FGitCheckInWorker::Execute(
 	};
 
 	FGitProcessRequest CommitRequest;
-	CommitRequest.WorkingDirectory = RepoRoot;
+	CommitRequest.WorkingDirectory = FString();
+	CommitRequest.RepoRoot = RepoRoot;
 	CommitRequest.Arguments = { TEXT("commit"), TEXT("-F"), MessageFile };
 
 	const FGitProcessResult CommitResult = ProcessRunner->Run(CommitRequest);
@@ -109,7 +123,8 @@ void FGitCheckInWorker::Execute(
 	if (Settings.bAutoPushAfterSubmit)
 	{
 		FGitProcessRequest PushRequest;
-		PushRequest.WorkingDirectory = RepoRoot;
+		PushRequest.WorkingDirectory = FString();
+		PushRequest.RepoRoot = RepoRoot;
 		PushRequest.Arguments = { TEXT("push") };
 		const FGitProcessResult PushResult = ProcessRunner->Run(PushRequest);
 		if (PushResult.ExitCode != 0)

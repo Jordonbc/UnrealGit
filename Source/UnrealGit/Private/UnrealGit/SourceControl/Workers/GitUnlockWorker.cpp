@@ -48,7 +48,8 @@ void FGitUnlockWorker::Execute(
 		}
 
 		FGitProcessRequest UnlockRequest;
-		UnlockRequest.WorkingDirectory = RepoRoot;
+		UnlockRequest.WorkingDirectory = FString();
+		UnlockRequest.RepoRoot = RepoRoot;
 		UnlockRequest.Arguments = { TEXT("lfs"), TEXT("unlock"), TEXT("--"), Relative };
 
 		const FGitProcessResult UnlockResult = ProcessRunner->Run(UnlockRequest);

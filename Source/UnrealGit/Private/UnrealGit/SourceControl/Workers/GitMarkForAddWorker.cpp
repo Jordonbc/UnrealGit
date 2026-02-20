@@ -31,8 +31,13 @@ void FGitMarkForAddWorker::Execute(
 	}
 
 	FGitProcessRequest AddRequest;
-	AddRequest.WorkingDirectory = RepoRoot;
-	AddRequest.Arguments = { TEXT("add"), TEXT("-N"), TEXT("--") };
+	AddRequest.WorkingDirectory = FString();
+	AddRequest.RepoRoot = RepoRoot;
+	AddRequest.Arguments = {
+		TEXT("add"),
+		TEXT("-N"),
+		TEXT("--")
+	};
 
 	for (const FString& AbsolutePath : Files)
 	{
@@ -46,7 +51,15 @@ void FGitMarkForAddWorker::Execute(
 		AddRequest.Arguments.Add(Relative);
 	}
 
+	UE_LOG(LogUnrealGit, Verbose, TEXT("MarkForAdd: Running git add with WorkingDirectory='%s', args='%s'"), 
+		*AddRequest.WorkingDirectory, *FString::Join(AddRequest.Arguments, TEXT(" ")));
+
 	const FGitProcessResult AddResult = ProcessRunner->Run(AddRequest);
+	UE_LOG(LogUnrealGit, Verbose, TEXT("MarkForAdd: git add result: exit=%d, stdout='%s', stderr='%s'"), 
+		AddResult.ExitCode, 
+		*UnrealGit::Workers::BytesToTextUtf8Lossy(AddResult.StdOut).Left(200),
+		*UnrealGit::Workers::BytesToTextUtf8Lossy(AddResult.StdErr).Left(200));
+
 	if (AddResult.ExitCode != 0)
 	{
 		OutOutput.bSuccess = false;

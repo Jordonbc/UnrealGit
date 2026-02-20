@@ -38,8 +38,8 @@ void FGitUpdateStatusWorker::Execute(
 
 	FGitProcessRequest StatusRequest;
 	StatusRequest.WorkingDirectory = FString();
+	StatusRequest.RepoRoot = RepoRoot;
 	StatusRequest.Arguments = {
-		TEXT("-C"), *RepoRoot,
 		TEXT("status"),
 		TEXT("--porcelain=v2"),
 		TEXT("-z"),
@@ -110,8 +110,8 @@ void FGitUpdateStatusWorker::Execute(
 		UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Full repo query - fetching all tracked files with git ls-files"));
 		FGitProcessRequest LsFilesRequest;
 		LsFilesRequest.WorkingDirectory = FString();
+		LsFilesRequest.RepoRoot = RepoRoot;
 		LsFilesRequest.Arguments = {
-			TEXT("-C"), *RepoRoot,
 			TEXT("ls-files"),
 			TEXT("-z"),
 		};
@@ -173,8 +173,8 @@ void FGitUpdateStatusWorker::Execute(
 		UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: Running git ls-files for %d files"), RepoRelativePathsNotInStatus.Num());
 		FGitProcessRequest LsFilesRequest;
 		LsFilesRequest.WorkingDirectory = FString();
+		LsFilesRequest.RepoRoot = RepoRoot;
 		LsFilesRequest.Arguments = {
-			TEXT("-C"), *RepoRoot,
 			TEXT("ls-files"),
 			TEXT("-z"),
 		};
@@ -230,7 +230,8 @@ void FGitUpdateStatusWorker::Execute(
 	{
 		FGitProcessRequest LocksRequest;
 		LocksRequest.WorkingDirectory = FString();
-		LocksRequest.Arguments = { TEXT("-C"), *RepoRoot, TEXT("lfs"), TEXT("locks"), TEXT("--json") };
+		LocksRequest.RepoRoot = RepoRoot;
+		LocksRequest.Arguments = { TEXT("lfs"), TEXT("locks"), TEXT("--json") };
 
 		const FGitProcessResult LocksResult = ProcessRunner->Run(LocksRequest);
 		if (LocksResult.ExitCode == 0)

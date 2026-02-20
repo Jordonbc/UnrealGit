@@ -31,7 +31,8 @@ void FGitSyncWorker::Execute(
 	}
 
 	FGitProcessRequest PullRequest;
-	PullRequest.WorkingDirectory = RepoRoot;
+	PullRequest.WorkingDirectory = FString();
+	PullRequest.RepoRoot = RepoRoot;
 	PullRequest.Arguments = Settings.bPullRebase
 		? TArray<FString>({ TEXT("pull"), TEXT("--rebase"), TEXT("--no-stat") })
 		: TArray<FString>({ TEXT("pull"), TEXT("--no-stat") });

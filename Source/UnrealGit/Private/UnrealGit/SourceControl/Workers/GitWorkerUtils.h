@@ -63,12 +63,9 @@ namespace UnrealGit::Workers
 	inline FGitProcessRequest MakeGitRequest(const FString& RepoRoot, const TArray<FString>& Arguments)
 	{
 		FGitProcessRequest Request;
+		Request.RepoRoot = RepoRoot;
 		Request.WorkingDirectory = FString();
-		Request.Arguments = { TEXT("-C"), *RepoRoot };
-		for (const FString& Arg : Arguments)
-		{
-			Request.Arguments.Add(Arg);
-		}
+		Request.Arguments = Arguments;
 		return Request;
 	}
 
