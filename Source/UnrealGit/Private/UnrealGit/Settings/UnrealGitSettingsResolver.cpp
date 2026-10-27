@@ -121,10 +121,13 @@ bool FUnrealGitSettingsResolver::Build(FUnrealGitProviderSettings& OutSettings, 
 		? Project->RepositoryRootOverride.Path
 		: FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
-	OutSettings.bPullRebase = Project ? Project->bPullRebase : false;
-	OutSettings.bAutoPushAfterSubmit = Project ? Project->bAutoPushAfterSubmit : false;
-	OutSettings.bEnableLfsLocks = Project ? Project->bEnableLfsLocks : true;
-	OutSettings.LfsLocksRefreshIntervalSeconds = Project ? Project->LfsLocksRefreshIntervalSeconds : 15;
+	if (Project)
+	{
+		OutSettings.bPullRebase = Project->bPullRebase;
+		OutSettings.bAutoPushAfterSubmit = Project->bAutoPushAfterSubmit;
+		OutSettings.bEnableLfsLocks = Project->bEnableLfsLocks;
+		OutSettings.LfsLocksRefreshIntervalSeconds = Project->LfsLocksRefreshIntervalSeconds;
+	}
 
 	FText Error;
 	if (!ValidateFileOrEmpty(OutSettings.GitExecutable, Error))
