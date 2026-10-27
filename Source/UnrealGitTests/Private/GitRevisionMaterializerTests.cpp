@@ -1,7 +1,7 @@
 // Copyright (C) 2026 Jordon Brooks. All Rights Reserved.
 
-#include "Misc/AutomationTest.h"
 #include "HAL/FileManager.h"
+#include "Misc/AutomationTest.h"
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "UnrealGit/Git/GitRevisionMaterializer.h"
