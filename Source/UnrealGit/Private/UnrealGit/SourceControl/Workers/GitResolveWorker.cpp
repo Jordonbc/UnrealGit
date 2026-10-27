@@ -1,4 +1,4 @@
-// Copyright Epic Games, Inc. All Rights Reserved.
+// Copyright (C) 2026 Jordon Brooks. All Rights Reserved.
 
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitResolveWorker.h"
 
