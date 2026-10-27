@@ -173,6 +173,63 @@ int32 SUnrealGitWidgetDiffCanvas::OnPaint(
 				OutDrawElements, Layer, AllottedGeometry.ToPaintGeometry(), LinePoints,
 				ESlateDrawEffect::None, *Color, bAntialias);
 		}
+
+		// Rulers: SRuler is private to UMGEditor and not exported, so its tick
+		// placement and label style are reproduced here using the same grid origin
+		// and rule period as the grid above.
+		const float RulerSize = 20.0f;
+		if (WhiteBrush)
+		{
+			FSlateDrawElement::MakeBox(
+				OutDrawElements, LayerId + 3,
+				AllottedGeometry.ToPaintGeometry(FVector2D(AllottedSize.X, RulerSize), FSlateLayoutTransform(FVector2D::ZeroVector)),
+				WhiteBrush, ESlateDrawEffect::None, FLinearColor(0.02f, 0.02f, 0.02f, 1.0f));
+			FSlateDrawElement::MakeBox(
+				OutDrawElements, LayerId + 3,
+				AllottedGeometry.ToPaintGeometry(FVector2D(RulerSize, AllottedSize.Y), FSlateLayoutTransform(FVector2D::ZeroVector)),
+				WhiteBrush, ESlateDrawEffect::None, FLinearColor(0.02f, 0.02f, 0.02f, 1.0f));
+		}
+
+		const float RulerStep = GridCellSize * RulePeriod;
+		if (RulerStep > 8.0f)
+		{
+			const FSlateFontInfo RulerFont = FAppStyle::GetFontStyle(TEXT("SmallFont"));
+			const float StartX = LocalGridOrigin.X - RulerStep * FMath::Max(FMath::CeilToInt(LocalGridOrigin.X / RulerStep), 0);
+			for (float X = StartX; X < AllottedSize.X; X += RulerStep)
+			{
+				if (X < RulerSize) continue;
+				TArray<FVector2D> TickPoints;
+				TickPoints.Add(FVector2D(X, 0.0f));
+				TickPoints.Add(FVector2D(X, 6.0f));
+				FSlateDrawElement::MakeLines(
+					OutDrawElements, LayerId + 4, AllottedGeometry.ToPaintGeometry(), TickPoints,
+					ESlateDrawEffect::None, FLinearColor(0.6f, 0.6f, 0.6f, 0.8f), true);
+				const int32 GraphValue = FMath::RoundToInt((X - Position.X) / FMath::Max(0.001f, EffectiveZoom));
+				FSlateDrawElement::MakeText(
+					OutDrawElements, LayerId + 4,
+					AllottedGeometry.ToPaintGeometry(FVector2D(80.0f, RulerSize), FSlateLayoutTransform(FVector2D(X + 2.0f, 1.0f))),
+					FText::AsNumber(GraphValue), RulerFont, ESlateDrawEffect::None,
+					FLinearColor(0.6f, 0.6f, 0.6f, 0.9f));
+			}
+
+			const float StartY = LocalGridOrigin.Y - RulerStep * FMath::Max(FMath::CeilToInt(LocalGridOrigin.Y / RulerStep), 0);
+			for (float Y = StartY; Y < AllottedSize.Y; Y += RulerStep)
+			{
+				if (Y < RulerSize) continue;
+				TArray<FVector2D> TickPoints;
+				TickPoints.Add(FVector2D(0.0f, Y));
+				TickPoints.Add(FVector2D(6.0f, Y));
+				FSlateDrawElement::MakeLines(
+					OutDrawElements, LayerId + 4, AllottedGeometry.ToPaintGeometry(), TickPoints,
+					ESlateDrawEffect::None, FLinearColor(0.6f, 0.6f, 0.6f, 0.8f), true);
+				const int32 GraphValue = FMath::RoundToInt((Y - Position.Y) / FMath::Max(0.001f, EffectiveZoom));
+				FSlateDrawElement::MakeText(
+					OutDrawElements, LayerId + 4,
+					AllottedGeometry.ToPaintGeometry(FVector2D(80.0f, RulerSize), FSlateLayoutTransform(FVector2D(1.0f, Y + 2.0f))),
+					FText::AsNumber(GraphValue), RulerFont, ESlateDrawEffect::None,
+					FLinearColor(0.6f, 0.6f, 0.6f, 0.9f));
+			}
+		}
 	}
 
 	if (Base && Base->GetResourceObject() != nullptr)
