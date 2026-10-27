@@ -35,6 +35,7 @@ All agents must obey following principles.
 ## Tooling Restrictions
 
 - Use CodeGraph as an almost grep replacement: prefer `codegraph explore "<symbol names or question>"` (or the `codegraph_explore` MCP tool when available) over grep/find + read loops for locating or understanding code.
+- When searching engine code, `cd Engine` first and run CodeGraph from there; running it from the plugin root resolves to the plugin's index, not the engine's.
 - Agents must not use Python, Perl, sed, ex, ed, or other command-line editors.
 - Do not rewrite files with `cat` or any stream editor; request maintainers to run scripts and keep edits within the provided tooling.
 - Never run anything inside `Scripts/` directly. Document the need and let a maintainer execute it. Exception: `just build` and `just test` are allowed.
