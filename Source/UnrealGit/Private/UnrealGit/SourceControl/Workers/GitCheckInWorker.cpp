@@ -7,7 +7,9 @@
 #include "UnrealGit.h"
 #include "Misc/ScopeExit.h"
 #include "SourceControlOperations.h"
-#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitLfsLockUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitPathUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitProcessUtils.h"
 
 FName FGitCheckInWorker::GetName() const
 {

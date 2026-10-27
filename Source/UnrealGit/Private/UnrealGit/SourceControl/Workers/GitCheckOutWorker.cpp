@@ -3,7 +3,8 @@
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitCheckOutWorker.h"
 
 #include "HAL/PlatformFileManager.h"
-#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitPathUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitProcessUtils.h"
 
 FName FGitCheckOutWorker::GetName() const
 {

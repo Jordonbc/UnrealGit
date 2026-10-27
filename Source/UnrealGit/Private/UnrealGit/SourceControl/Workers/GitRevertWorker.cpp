@@ -3,7 +3,9 @@
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitRevertWorker.h"
 
 #include "UnrealGit.h"
-#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitLfsLockUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitPathUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitProcessUtils.h"
 
 FName FGitRevertWorker::GetName() const
 {

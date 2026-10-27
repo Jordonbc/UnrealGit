@@ -2,7 +2,8 @@
 
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitMarkForAddWorker.h"
 
-#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitPathUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitProcessUtils.h"
 
 FName FGitMarkForAddWorker::GetName() const
 {

@@ -2,7 +2,8 @@
 
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitCopyWorker.h"
 
-#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitPathUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitProcessUtils.h"
 
 FName FGitCopyWorker::GetName() const
 {

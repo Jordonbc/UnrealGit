@@ -3,7 +3,8 @@
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitGetHistoryWorker.h"
 
 #include "UnrealGit/Git/Parsers/GitFileHistoryParser.h"
-#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitHistoryUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitPathUtils.h"
 
 FName FGitGetHistoryWorker::GetName() const
 {

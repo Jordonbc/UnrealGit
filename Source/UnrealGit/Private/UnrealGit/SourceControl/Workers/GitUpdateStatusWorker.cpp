@@ -7,7 +7,8 @@
 #include "UnrealGit/Git/IGitProcessRunner.h"
 #include "UnrealGit/Git/Parsers/GitLfsLocksParser.h"
 #include "UnrealGit/Git/Parsers/GitStatusParser.h"
-#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitHistoryUtils.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitPathUtils.h"
 
 FName FGitUpdateStatusWorker::GetName() const
 {
