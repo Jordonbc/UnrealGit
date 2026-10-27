@@ -3,6 +3,9 @@
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/SUnrealGitWidgetDiffCanvas.h"
 
 #include "Rendering/DrawElements.h"
+#include "Settings/EditorStyleSettings.h"
+#include "Settings/WidgetDesignerSettings.h"
+#include "Styling/AppStyle.h"
 #include "Styling/CoreStyle.h"
 
 namespace
@@ -100,39 +103,76 @@ int32 SUnrealGitWidgetDiffCanvas::OnPaint(
 	const FVector2D DrawSize = ImageSize * EffectiveZoom;
 	const FVector2D Position = (AllottedSize - DrawSize) * 0.5f + State.Pan;
 
-	// Designer-style dark viewport background with a subtle grid.
+	// Grid rendering mirrors SDesignSurface::PaintBackgroundAsLines (UMGEditor)
+	// so the viewport matches the real UMG Designer: Graph.Panel brushes/colors,
+	// rule-period major lines, and zoom-dependent grid inflation.
 	const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
-	if (WhiteBrush)
+	const FSlateBrush* BackgroundImage = FAppStyle::GetBrush(TEXT("Graph.Panel.SolidBackground"));
+	if (BackgroundImage)
 	{
-		FSlateDrawElement::MakeBox(
-			OutDrawElements,
-			LayerId,
-			AllottedGeometry.ToPaintGeometry(),
-			WhiteBrush,
-			ESlateDrawEffect::None,
-			FLinearColor(0.045f, 0.045f, 0.045f, 1.0f));
+		FSlateDrawElement::MakeBox(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), BackgroundImage);
 
-		const float GridStep = 50.0f;
-		TArray<FVector2D> GridLines;
-		for (float X = 0.0f; X <= AllottedSize.X; X += GridStep)
+		const bool bAntialias = GetDefault<UEditorStyleSettings>()->bAntiAliasGrid;
+		const int32 RulePeriod = FMath::Max(1, (int32)FAppStyle::GetFloat(TEXT("Graph.Panel.GridRulePeriod")));
+		const FLinearColor RegularColor(FAppStyle::GetColor(TEXT("Graph.Panel.GridLineColor")));
+		const FLinearColor RuleColor(FAppStyle::GetColor(TEXT("Graph.Panel.GridRuleColor")));
+		const FLinearColor CenterColor(FAppStyle::GetColor(TEXT("Graph.Panel.GridCenterColor")));
+
+		const float GraphSmallestGridSize = 8.0f;
+		const float NominalGridSize = (float)FMath::Max(1, GetDefault<UWidgetDesignerSettings>()->GridSnapSize);
+		float Inflation = 1.0f;
+		while (EffectiveZoom * Inflation * NominalGridSize <= GraphSmallestGridSize)
 		{
-			GridLines.Add(FVector2D(X, 0.0f));
-			GridLines.Add(FVector2D(X, AllottedSize.Y));
+			Inflation *= 2.0f;
 		}
-		for (float Y = 0.0f; Y <= AllottedSize.Y; Y += GridStep)
+		const float GridCellSize = NominalGridSize * EffectiveZoom * Inflation;
+		const FVector2D LocalGridOrigin = Position;
+
+		const float RuleSize = GridCellSize * RulePeriod;
+		float ImageOffsetX = LocalGridOrigin.X - (RuleSize * FMath::Max(FMath::CeilToInt(LocalGridOrigin.X / RuleSize), 0));
+		float ImageOffsetY = LocalGridOrigin.Y - (RuleSize * FMath::Max(FMath::CeilToInt(LocalGridOrigin.Y / RuleSize), 0));
+
+		for (int32 GridIndex = 0; ImageOffsetY < AllottedSize.Y; ImageOffsetY += GridCellSize, ++GridIndex)
 		{
-			GridLines.Add(FVector2D(0.0f, Y));
-			GridLines.Add(FVector2D(AllottedSize.X, Y));
+			if (ImageOffsetY < 0.0f)
+			{
+				continue;
+			}
+			const bool bIsRuleLine = (GridIndex % RulePeriod) == 0;
+			const int32 Layer = bIsRuleLine ? (LayerId + 2) : (LayerId + 1);
+			const FLinearColor* Color = bIsRuleLine ? &RuleColor : &RegularColor;
+			if (FMath::IsNearlyEqual(LocalGridOrigin.Y, ImageOffsetY, 1.0f))
+			{
+				Color = &CenterColor;
+			}
+			TArray<FVector2D> LinePoints;
+			LinePoints.Add(FVector2D(0.0f, ImageOffsetY));
+			LinePoints.Add(FVector2D(AllottedSize.X, ImageOffsetY));
+			FSlateDrawElement::MakeLines(
+				OutDrawElements, Layer, AllottedGeometry.ToPaintGeometry(), LinePoints,
+				ESlateDrawEffect::None, *Color, bAntialias);
 		}
-		FSlateDrawElement::MakeLines(
-			OutDrawElements,
-			LayerId + 1,
-			AllottedGeometry.ToPaintGeometry(),
-			GridLines,
-			ESlateDrawEffect::None,
-			FLinearColor(1.0f, 1.0f, 1.0f, 0.035f),
-			true,
-			1.0f);
+
+		for (int32 GridIndex = 0; ImageOffsetX < AllottedSize.X; ImageOffsetX += GridCellSize, ++GridIndex)
+		{
+			if (ImageOffsetX < 0.0f)
+			{
+				continue;
+			}
+			const bool bIsRuleLine = (GridIndex % RulePeriod) == 0;
+			const int32 Layer = bIsRuleLine ? (LayerId + 2) : (LayerId + 1);
+			const FLinearColor* Color = bIsRuleLine ? &RuleColor : &RegularColor;
+			if (FMath::IsNearlyEqual(LocalGridOrigin.X, ImageOffsetX, 1.0f))
+			{
+				Color = &CenterColor;
+			}
+			TArray<FVector2D> LinePoints;
+			LinePoints.Add(FVector2D(ImageOffsetX, 0.0f));
+			LinePoints.Add(FVector2D(ImageOffsetX, AllottedSize.Y));
+			FSlateDrawElement::MakeLines(
+				OutDrawElements, Layer, AllottedGeometry.ToPaintGeometry(), LinePoints,
+				ESlateDrawEffect::None, *Color, bAntialias);
+		}
 	}
 
 	if (Base && Base->GetResourceObject() != nullptr)
@@ -144,6 +184,20 @@ int32 SUnrealGitWidgetDiffCanvas::OnPaint(
 			Base,
 			ESlateDrawEffect::None,
 			FLinearColor::White);
+	}
+
+	// Design-area boundary (matches the Designer's design rectangle).
+	if (WhiteBrush && Base && Base->GetResourceObject() != nullptr)
+	{
+		TArray<FVector2D> BorderPoints;
+		BorderPoints.Add(Position);
+		BorderPoints.Add(FVector2D(Position.X + DrawSize.X, Position.Y));
+		BorderPoints.Add(Position + DrawSize);
+		BorderPoints.Add(FVector2D(Position.X, Position.Y + DrawSize.Y));
+		BorderPoints.Add(Position);
+		FSlateDrawElement::MakeLines(
+			OutDrawElements, LayerId + 3, AllottedGeometry.ToPaintGeometry(), BorderPoints,
+			ESlateDrawEffect::None, FLinearColor(1.0f, 1.0f, 1.0f, 0.22f), true, 1.0f);
 	}
 
 	const FSlateBrush* Overlay = OverlayBrush.Get();
