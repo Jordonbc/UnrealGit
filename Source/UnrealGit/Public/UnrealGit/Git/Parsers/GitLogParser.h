@@ -11,7 +11,7 @@
  *
  * This parser is deterministic and side-effect free.
  */
-class FGitLogParser final
+class UNREALGIT_API FGitLogParser final
 {
 public:
 	/**
