@@ -8,212 +8,142 @@
 
 namespace UnrealGit::Git
 {
+	namespace
+	{
+		FString FindFirstExisting(const TArray<FString>& Candidates)
+		{
+			for (const FString& Candidate : Candidates)
+			{
+				if (IFileManager::Get().FileExists(*Candidate))
+				{
+					return Candidate;
+				}
+			}
+			return FString();
+		}
+	}
+
 	FString FindGitBinary()
 	{
 #if PLATFORM_WINDOWS
+		const FString ProgramFiles = FPlatformMisc::GetEnvironmentVariable(TEXT("ProgramFiles"));
+		const FString ProgramFilesX86 = FPlatformMisc::GetEnvironmentVariable(TEXT("ProgramFiles(x86)"));
+		const FString LocalAppData = FPlatformMisc::GetEnvironmentVariable(TEXT("LOCALAPPDATA"));
+
+		TArray<FString> Candidates;
+
 		// 1) Standard install directories.
+		if (!ProgramFiles.IsEmpty())
 		{
-			const FString ProgramFiles = FPlatformMisc::GetEnvironmentVariable(TEXT("ProgramFiles"));
-			const FString Candidate = FPaths::Combine(ProgramFiles, TEXT("Git"), TEXT("bin"), TEXT("git.exe"));
-			if (!ProgramFiles.IsEmpty() && IFileManager::Get().FileExists(*Candidate))
-			{
-				return Candidate;
-			}
+			Candidates.Add(FPaths::Combine(ProgramFiles, TEXT("Git"), TEXT("bin"), TEXT("git.exe")));
 		}
+		if (!ProgramFilesX86.IsEmpty())
 		{
-			const FString ProgramFilesX86 = FPlatformMisc::GetEnvironmentVariable(TEXT("ProgramFiles(x86)"));
-			const FString Candidate = FPaths::Combine(ProgramFilesX86, TEXT("Git"), TEXT("bin"), TEXT("git.exe"));
-			if (!ProgramFilesX86.IsEmpty() && IFileManager::Get().FileExists(*Candidate))
-			{
-				return Candidate;
-			}
+			Candidates.Add(FPaths::Combine(ProgramFilesX86, TEXT("Git"), TEXT("bin"), TEXT("git.exe")));
 		}
+		if (!LocalAppData.IsEmpty())
 		{
-			const FString LocalAppData = FPlatformMisc::GetEnvironmentVariable(TEXT("LOCALAPPDATA"));
-			const FString Candidate = FPaths::Combine(LocalAppData, TEXT("Programs"), TEXT("Git"), TEXT("cmd"), TEXT("git.exe"));
-			if (!LocalAppData.IsEmpty() && IFileManager::Get().FileExists(*Candidate))
-			{
-				return Candidate;
-			}
+			Candidates.Add(FPaths::Combine(LocalAppData, TEXT("Programs"), TEXT("Git"), TEXT("cmd"), TEXT("git.exe")));
 		}
 
 		// 2) SmartGit bundled git.
+		if (!ProgramFilesX86.IsEmpty())
 		{
-			const FString ProgramFilesX86 = FPlatformMisc::GetEnvironmentVariable(TEXT("ProgramFiles(x86)"));
-			if (!ProgramFilesX86.IsEmpty())
-			{
-				FString Candidate = FPaths::Combine(ProgramFilesX86, TEXT("SmartGit"), TEXT("git"), TEXT("bin"), TEXT("git.exe"));
-				if (IFileManager::Get().FileExists(*Candidate))
-				{
-					return Candidate;
-				}
-				Candidate = FPaths::Combine(ProgramFilesX86, TEXT("SmartGit"), TEXT("bin"), TEXT("git.exe"));
-				if (IFileManager::Get().FileExists(*Candidate))
-				{
-					return Candidate;
-				}
-			}
+			Candidates.Add(FPaths::Combine(ProgramFilesX86, TEXT("SmartGit"), TEXT("git"), TEXT("bin"), TEXT("git.exe")));
+			Candidates.Add(FPaths::Combine(ProgramFilesX86, TEXT("SmartGit"), TEXT("bin"), TEXT("git.exe")));
 		}
 
 		// 3) SourceTree bundled git.
+		if (!LocalAppData.IsEmpty())
 		{
-			const FString LocalAppData = FPlatformMisc::GetEnvironmentVariable(TEXT("LOCALAPPDATA"));
-			if (!LocalAppData.IsEmpty())
-			{
-				const FString Candidate = FPaths::Combine(LocalAppData, TEXT("Atlassian"), TEXT("SourceTree"), TEXT("git_local"), TEXT("bin"), TEXT("git.exe"));
-				if (IFileManager::Get().FileExists(*Candidate))
-				{
-					return Candidate;
-				}
-			}
+			Candidates.Add(FPaths::Combine(LocalAppData, TEXT("Atlassian"), TEXT("SourceTree"), TEXT("git_local"), TEXT("bin"), TEXT("git.exe")));
 		}
 
 		// 4) GitHub Desktop PortableGit.
+		if (!LocalAppData.IsEmpty())
 		{
-			const FString LocalAppData = FPlatformMisc::GetEnvironmentVariable(TEXT("LOCALAPPDATA"));
-			if (!LocalAppData.IsEmpty())
+			const FString SearchPath = FPaths::Combine(LocalAppData, TEXT("GitHub"), TEXT("PortableGit_*"));
+			TArray<FString> PortableGitFolders;
+			IFileManager::Get().FindFiles(PortableGitFolders, *SearchPath, false, true);
+			if (PortableGitFolders.Num() > 0)
 			{
-				const FString SearchPath = FPaths::Combine(LocalAppData, TEXT("GitHub"), TEXT("PortableGit_*"));
-				TArray<FString> PortableGitFolders;
-				IFileManager::Get().FindFiles(PortableGitFolders, *SearchPath, false, true);
-				if (PortableGitFolders.Num() > 0)
-				{
-					const FString& Folder = PortableGitFolders.Last();
-					FString Candidate = FPaths::Combine(LocalAppData, TEXT("GitHub"), Folder, TEXT("cmd"), TEXT("git.exe"));
-					if (IFileManager::Get().FileExists(*Candidate))
-					{
-						return Candidate;
-					}
-					Candidate = FPaths::Combine(LocalAppData, TEXT("GitHub"), Folder, TEXT("bin"), TEXT("git.exe"));
-					if (IFileManager::Get().FileExists(*Candidate))
-					{
-						return Candidate;
-					}
-				}
+				const FString& Folder = PortableGitFolders.Last();
+				Candidates.Add(FPaths::Combine(LocalAppData, TEXT("GitHub"), Folder, TEXT("cmd"), TEXT("git.exe")));
+				Candidates.Add(FPaths::Combine(LocalAppData, TEXT("GitHub"), Folder, TEXT("bin"), TEXT("git.exe")));
 			}
 		}
 
 		// 5) Tower bundled git.
+		if (!ProgramFilesX86.IsEmpty())
 		{
-			const FString ProgramFilesX86 = FPlatformMisc::GetEnvironmentVariable(TEXT("ProgramFiles(x86)"));
-			if (!ProgramFilesX86.IsEmpty())
-			{
-				const FString Candidate = FPaths::Combine(ProgramFilesX86, TEXT("fournova"), TEXT("Tower"), TEXT("vendor"), TEXT("Git"), TEXT("bin"), TEXT("git.exe"));
-				if (IFileManager::Get().FileExists(*Candidate))
-				{
-					return Candidate;
-				}
-			}
+			Candidates.Add(FPaths::Combine(ProgramFilesX86, TEXT("fournova"), TEXT("Tower"), TEXT("vendor"), TEXT("Git"), TEXT("bin"), TEXT("git.exe")));
+		}
+
+		const FString Found = FindFirstExisting(Candidates);
+		if (!Found.IsEmpty())
+		{
+			return Found;
 		}
 #elif PLATFORM_MAC
-		// 1) Official git.
-		if (IFileManager::Get().FileExists(TEXT("/usr/local/git/bin/git")))
-		{
-			return TEXT("/usr/local/git/bin/git");
-		}
-		// 2) Homebrew.
-		if (IFileManager::Get().FileExists(TEXT("/usr/local/bin/git")))
-		{
-			return TEXT("/usr/local/bin/git");
-		}
-		// 3) Homebrew (Apple Silicon).
-		if (IFileManager::Get().FileExists(TEXT("/opt/homebrew/bin/git")))
-		{
-			return TEXT("/opt/homebrew/bin/git");
-		}
-		// 4) MacPorts.
-		if (IFileManager::Get().FileExists(TEXT("/opt/local/bin/git")))
-		{
-			return TEXT("/opt/local/bin/git");
-		}
-		// 5) Command Line Tools.
-		if (IFileManager::Get().FileExists(TEXT("/usr/bin/git")))
-		{
-			return TEXT("/usr/bin/git");
-		}
-
 		const FString Home = FPlatformMisc::GetEnvironmentVariable(TEXT("HOME"));
 
+		TArray<FString> Candidates;
+
+		// 1) Official git.
+		Candidates.Add(TEXT("/usr/local/git/bin/git"));
+		// 2) Homebrew.
+		Candidates.Add(TEXT("/usr/local/bin/git"));
+		// 3) Homebrew (Apple Silicon).
+		Candidates.Add(TEXT("/opt/homebrew/bin/git"));
+		// 4) MacPorts.
+		Candidates.Add(TEXT("/opt/local/bin/git"));
+		// 5) Command Line Tools.
+		Candidates.Add(TEXT("/usr/bin/git"));
+
 		// 6) SmartGit app bundle.
+		Candidates.Add(TEXT("/Applications/SmartGit.app/Contents/Resources/git/bin/git"));
+		if (!Home.IsEmpty())
 		{
-			const FString Candidate = TEXT("/Applications/SmartGit.app/Contents/Resources/git/bin/git");
-			if (IFileManager::Get().FileExists(*Candidate))
-			{
-				return Candidate;
-			}
-			if (!Home.IsEmpty())
-			{
-				const FString UserCandidate = FPaths::Combine(Home, TEXT("Applications"), TEXT("SmartGit.app"), TEXT("Contents"), TEXT("Resources"), TEXT("git"), TEXT("bin"), TEXT("git"));
-				if (IFileManager::Get().FileExists(*UserCandidate))
-				{
-					return UserCandidate;
-				}
-			}
+			Candidates.Add(FPaths::Combine(Home, TEXT("Applications"), TEXT("SmartGit.app"), TEXT("Contents"), TEXT("Resources"), TEXT("git"), TEXT("bin"), TEXT("git")));
 		}
 
 		// 7) SourceTree app bundle.
+		Candidates.Add(TEXT("/Applications/SourceTree.app/Contents/Resources/git_local/bin/git"));
+		if (!Home.IsEmpty())
 		{
-			const FString Candidate = TEXT("/Applications/SourceTree.app/Contents/Resources/git_local/bin/git");
-			if (IFileManager::Get().FileExists(*Candidate))
-			{
-				return Candidate;
-			}
-			if (!Home.IsEmpty())
-			{
-				const FString UserCandidate = FPaths::Combine(Home, TEXT("Applications"), TEXT("SourceTree.app"), TEXT("Contents"), TEXT("Resources"), TEXT("git_local"), TEXT("bin"), TEXT("git"));
-				if (IFileManager::Get().FileExists(*UserCandidate))
-				{
-					return UserCandidate;
-				}
-			}
+			Candidates.Add(FPaths::Combine(Home, TEXT("Applications"), TEXT("SourceTree.app"), TEXT("Contents"), TEXT("Resources"), TEXT("git_local"), TEXT("bin"), TEXT("git")));
 		}
 
 		// 8) GitHub Desktop app bundle.
+		Candidates.Add(TEXT("/Applications/GitHub Desktop.app/Contents/Resources/app/git/bin/git"));
+		if (!Home.IsEmpty())
 		{
-			const FString Candidate = TEXT("/Applications/GitHub Desktop.app/Contents/Resources/app/git/bin/git");
-			if (IFileManager::Get().FileExists(*Candidate))
-			{
-				return Candidate;
-			}
-			if (!Home.IsEmpty())
-			{
-				const FString UserCandidate = FPaths::Combine(Home, TEXT("Applications"), TEXT("GitHub Desktop.app"), TEXT("Contents"), TEXT("Resources"), TEXT("app"), TEXT("git"), TEXT("bin"), TEXT("git"));
-				if (IFileManager::Get().FileExists(*UserCandidate))
-				{
-					return UserCandidate;
-				}
-			}
+			Candidates.Add(FPaths::Combine(Home, TEXT("Applications"), TEXT("GitHub Desktop.app"), TEXT("Contents"), TEXT("Resources"), TEXT("app"), TEXT("git"), TEXT("bin"), TEXT("git")));
 		}
 
 		// 9) Tower app bundle.
+		Candidates.Add(TEXT("/Applications/Tower.app/Contents/Resources/git/bin/git"));
+		if (!Home.IsEmpty())
 		{
-			const FString Candidate = TEXT("/Applications/Tower.app/Contents/Resources/git/bin/git");
-			if (IFileManager::Get().FileExists(*Candidate))
-			{
-				return Candidate;
-			}
-			if (!Home.IsEmpty())
-			{
-				const FString UserCandidate = FPaths::Combine(Home, TEXT("Applications"), TEXT("Tower.app"), TEXT("Contents"), TEXT("Resources"), TEXT("git"), TEXT("bin"), TEXT("git"));
-				if (IFileManager::Get().FileExists(*UserCandidate))
-				{
-					return UserCandidate;
-				}
-			}
+			Candidates.Add(FPaths::Combine(Home, TEXT("Applications"), TEXT("Tower.app"), TEXT("Contents"), TEXT("Resources"), TEXT("git"), TEXT("bin"), TEXT("git")));
+		}
+
+		const FString Found = FindFirstExisting(Candidates);
+		if (!Found.IsEmpty())
+		{
+			return Found;
 		}
 #else
 		// Linux.
-		if (IFileManager::Get().FileExists(TEXT("/usr/bin/git")))
+		TArray<FString> Candidates;
+		Candidates.Add(TEXT("/usr/bin/git"));
+		Candidates.Add(TEXT("/usr/local/bin/git"));
+		Candidates.Add(TEXT("/snap/bin/git"));
+
+		const FString Found = FindFirstExisting(Candidates);
+		if (!Found.IsEmpty())
 		{
-			return TEXT("/usr/bin/git");
-		}
-		if (IFileManager::Get().FileExists(TEXT("/usr/local/bin/git")))
-		{
-			return TEXT("/usr/local/bin/git");
-		}
-		if (IFileManager::Get().FileExists(TEXT("/snap/bin/git")))
-		{
-			return TEXT("/snap/bin/git");
+			return Found;
 		}
 #endif
 
