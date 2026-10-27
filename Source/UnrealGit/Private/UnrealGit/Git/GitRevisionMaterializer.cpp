@@ -50,10 +50,21 @@ bool FGitRevisionMaterializer::Materialize(
 	const FString OutputFile = FPaths::Combine(SessionRootDirectory, FileName);
 
 	FGitProcessRequest ShowRequest;
-	ShowRequest.WorkingDirectory = RepoRoot;
-	ShowRequest.Arguments = { TEXT("show"), FString::Printf(TEXT("%s:%s"), *CommitId, *RelativePath) };
+	ShowRequest.RepoRoot = RepoRoot;
+	ShowRequest.WorkingDirectory = FString();
+	// Use cat-file --filters so LFS-managed assets are smudged to their real content.
+	ShowRequest.Arguments = { TEXT("cat-file"), TEXT("--filters"), FString::Printf(TEXT("%s:%s"), *CommitId, *RelativePath) };
 
-	const FGitProcessResult ShowResult = ProcessRunner->Run(ShowRequest);
+	FGitProcessResult ShowResult = ProcessRunner->Run(ShowRequest);
+	if (ShowResult.ExitCode != 0)
+	{
+		// Fall back to git show for older Git versions.
+		FGitProcessRequest FallbackRequest;
+		FallbackRequest.RepoRoot = RepoRoot;
+		FallbackRequest.WorkingDirectory = FString();
+		FallbackRequest.Arguments = { TEXT("show"), FString::Printf(TEXT("%s:%s"), *CommitId, *RelativePath) };
+		ShowResult = ProcessRunner->Run(FallbackRequest);
+	}
 	if (ShowResult.ExitCode != 0)
 	{
 		if (ShowResult.StdErr.Num() > 0)

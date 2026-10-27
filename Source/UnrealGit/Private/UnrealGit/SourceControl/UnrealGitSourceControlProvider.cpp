@@ -93,7 +93,7 @@ void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
 
 	ProcessRunner = MakeShared<FSystemGitProcessRunner, ESPMode::ThreadSafe>(Settings.GitExecutable);
 
-	const FString SessionDir = FPaths::Combine(FPaths::ProjectIntermediateDir(), TEXT("UnrealGit"), TEXT("Materialized"), FGuid::NewGuid().ToString(EGuidFormats::Digits));
+	const FString SessionDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::DiffDir(), TEXT("UnrealGit"), FGuid::NewGuid().ToString(EGuidFormats::Digits)));
 	RevisionMaterializer = MakeShared<FGitRevisionMaterializer, ESPMode::ThreadSafe>(SessionDir);
 
 	StartEnvironmentValidation();

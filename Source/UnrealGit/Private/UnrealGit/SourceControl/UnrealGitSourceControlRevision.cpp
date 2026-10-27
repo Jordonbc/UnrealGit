@@ -128,7 +128,39 @@ bool FUnrealGitSourceControlRevision::Get(FString& InOutFilename, EConcurrency::
 
 	if (IsInGameThread())
 	{
-		return false;
+		// Synchronous request on the game thread: run git on a worker thread and block
+		// until materialization completes, since ProcessRunner cannot run on the game thread.
+		{
+			FScopeLock Scope(&Lock);
+			if (CachedMaterializedFilename.IsSet())
+			{
+				InOutFilename = CachedMaterializedFilename.GetValue();
+				return true;
+			}
+		}
+
+		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe> Runner = ProcessRunner;
+		const TSharedRef<FGitRevisionMaterializer, ESPMode::ThreadSafe> Mat = Materializer;
+		const FString Root = RepoRoot;
+		const FString Commit = RevisionInfo.CommitId;
+		const FString Path = RepoRelativePath;
+
+		FString Filename;
+		FString MatError;
+		TFuture<bool> Future = Async(EAsyncExecution::ThreadPool, [Runner, Mat, Root, Commit, Path, &Filename, &MatError]()
+		{
+			return Mat->Materialize(Runner, Root, Commit, Path, Filename, MatError);
+		});
+
+		const bool bOk = Future.Get();
+		UE_LOG(LogTemp, Warning, TEXT("Revision::Get (sync, game thread): bOk=%d Filename=%s Error=%s"), bOk ? 1 : 0, *Filename, *MatError);
+		if (bOk)
+		{
+			FScopeLock Scope(&Lock);
+			CachedMaterializedFilename = Filename;
+			InOutFilename = Filename;
+		}
+		return bOk;
 	}
 
 	return MaterializeSync(InOutFilename);
