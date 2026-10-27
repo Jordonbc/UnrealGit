@@ -34,31 +34,40 @@ private:
 	/** Refreshes the displayed provider status. */
 	void RefreshStatus();
 
-	/** Applies the manually entered Git executable path. */
+	/** Applies the manually entered Git executable path.
+	 * @return Reply describing how the event was handled. */
 	FReply OnSetGitPath();
 
-	/** Opens a file dialog to choose the Git executable. */
+	/** Opens a file dialog to choose the Git executable.
+	 * @return Reply describing how the event was handled. */
 	FReply OnBrowseGitPath();
 
-	/** Initializes a new Git repository for the current project. */
+	/** Initializes a new Git repository for the current project.
+	 * @return Reply describing how the event was handled. */
 	FReply OnInitialize();
 
-	/** Toggles creation of a .gitignore file during initialization. */
+	/** Toggles creation of a .gitignore file during initialization.
+	 * @param NewCheckedState New checkbox state. */
 	void OnCheckedGitIgnore(ECheckBoxState NewCheckedState);
 
-	/** Toggles creation of a README file during initialization. */
+	/** Toggles creation of a README file during initialization.
+	 * @param NewCheckedState New checkbox state. */
 	void OnCheckedReadme(ECheckBoxState NewCheckedState);
 
-	/** Toggles creation of a .gitattributes file during initialization. */
+	/** Toggles creation of a .gitattributes file during initialization.
+	 * @param NewCheckedState New checkbox state. */
 	void OnCheckedGitAttributes(ECheckBoxState NewCheckedState);
 
-	/** Toggles creation of an initial commit during initialization. */
+	/** Toggles creation of an initial commit during initialization.
+	 * @param NewCheckedState New checkbox state. */
 	void OnCheckedInitialCommit(ECheckBoxState NewCheckedState);
 
-	/** Returns whether the repository can currently be initialized. */
+	/** Returns the visibility of the initialization controls (Collapsed when initialization is unavailable). */
 	EVisibility CanInitializeRepository() const;
 
-	/** Wraps a status value for display. */
+	/** Wraps a status value for display.
+	 * @param Value Status value to wrap.
+	 * @return Wrapped status text. */
 	FText StatusValue(const FString& Value) const;
 
 	FUnrealGitSourceControlProvider* Provider = nullptr;
