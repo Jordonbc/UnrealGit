@@ -9,10 +9,8 @@
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitRevisionMaterializerTest, "UnrealGit.Revision.MaterializeBinary", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitRevisionMaterializerTest::RunTest(const FString& Parameters)
+bool FUnrealGitRevisionMaterializerTest::RunTest(const FString&)
 {
-	(void)Parameters;
-
 	const FString SessionDir = FPaths::Combine(FPaths::ProjectIntermediateDir(), TEXT("UnrealGitTests"), TEXT("Materialize"));
 	TSharedRef<FGitRevisionMaterializer, ESPMode::ThreadSafe> Materializer = MakeShared<FGitRevisionMaterializer, ESPMode::ThreadSafe>(SessionDir);
 
