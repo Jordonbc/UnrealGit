@@ -499,8 +499,13 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 
 	if (InConcurrency == EConcurrency::Synchronous)
 	{
-		FUnrealGitWorkerOutput Output;
-		Command->Worker->Execute(Runner, Command->ProviderSettings, WorkingDirHint, Command->bQueryLfsLocks, Command->Operation, Command->Files, ExistingRepoRoot, Output);
+		TFuture<FUnrealGitWorkerOutput> Future = Async(EAsyncExecution::ThreadPool, [Runner, WorkingDirHint, ExistingRepoRoot, Command]()
+		{
+			FUnrealGitWorkerOutput Output;
+			Command->Worker->Execute(Runner, Command->ProviderSettings, WorkingDirHint, Command->bQueryLfsLocks, Command->Operation, Command->Files, ExistingRepoRoot, Output);
+			return Output;
+		});
+		const FUnrealGitWorkerOutput Output = Future.Get();
 		ReconcileWorkerOutput(Command->Operation, Command->Files, Command->Delegate, Output);
 		UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: Executed operation %s synchronously (files=%d, success=%d)"),
 			*OpName.ToString(), InFiles.Num(), Output.bSuccess ? 1 : 0);
