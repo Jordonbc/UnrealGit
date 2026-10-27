@@ -44,5 +44,5 @@ void FUnrealGitModule::ShutdownModule()
 }
 
 #undef LOCTEXT_NAMESPACE
-	
+
 IMPLEMENT_MODULE(FUnrealGitModule, UnrealGit)
