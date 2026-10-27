@@ -25,6 +25,128 @@
 
 #define LOCTEXT_NAMESPACE "UnrealGitWidgetDiffLauncher"
 
+static void MaterializeRevision(
+	const FString& AssetFileName,
+	const FString& Revision,
+	bool bIsRevision,
+	bool bLeft,
+	TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe>& OutRevisionPtr,
+	FString& OutTempFile,
+	FDateTime& OutDate,
+	FText& OutError,
+	bool& bOutOk)
+{
+	if (!bIsRevision)
+	{
+		return;
+	}
+
+	ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
+	FSourceControlStatePtr State = Provider.GetState(AssetFileName, EStateCacheUsage::Use);
+	if (!State.IsValid())
+	{
+		bOutOk = false;
+		OutError = bLeft
+			? LOCTEXT("NoStateLeft", "Could not query source control state for the left revision.")
+			: LOCTEXT("NoStateRight", "Could not query source control state for the right revision.");
+	}
+	else
+	{
+		OutRevisionPtr = State->FindHistoryRevision(Revision);
+		if (!OutRevisionPtr.IsValid())
+		{
+			bOutOk = false;
+			OutError = bLeft
+				? LOCTEXT("NoRevisionLeft", "Could not find the left revision in history.")
+				: LOCTEXT("NoRevisionRight", "Could not find the right revision in history.");
+		}
+		else if (!OutRevisionPtr->Get(OutTempFile))
+		{
+			bOutOk = false;
+			OutError = bLeft
+				? LOCTEXT("GetLeftFailed", "Failed to materialize the left revision.")
+				: LOCTEXT("GetRightFailed", "Failed to materialize the right revision.");
+		}
+		else
+		{
+			OutDate = OutRevisionPtr->GetDate();
+		}
+	}
+}
+
+static bool ResolveBlueprint(
+	TSharedPtr<FUnrealGitWidgetDiffSession> Session,
+	const FString& AssetFileName,
+	bool bIsRevision,
+	bool bLeft,
+	TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> RevisionPtr,
+	UWidgetBlueprint*& OutBlueprint)
+{
+	if (bIsRevision)
+	{
+		UPackage* Package = DiffUtils::LoadPackageForDiff(RevisionPtr);
+		if (!Package)
+		{
+			Session->SetError(bLeft
+				? LOCTEXT("LoadLeftPackageFailed", "Failed to load the left revision package.")
+				: LOCTEXT("LoadRightPackageFailed", "Failed to load the right revision package."));
+			return false;
+		}
+		const FString AssetName = FPaths::GetBaseFilename(RevisionPtr->GetFilename());
+		UWidgetBlueprint* Blueprint = Cast<UWidgetBlueprint>(FindObject<UObject>(Package, *AssetName));
+		if (!Blueprint)
+		{
+			Blueprint = Cast<UWidgetBlueprint>(Package->FindAssetInPackage());
+		}
+		if (!Blueprint)
+		{
+			Session->SetError(bLeft
+				? LOCTEXT("FindLeftAssetFailed", "Could not find a widget blueprint in the left revision.")
+				: LOCTEXT("FindRightAssetFailed", "Could not find a widget blueprint in the right revision."));
+			return false;
+		}
+		OutBlueprint = Blueprint;
+		return true;
+	}
+
+	FString PackageName;
+	if (!FPackageName::TryConvertFilenameToLongPackageName(AssetFileName, PackageName))
+	{
+		Session->SetError(bLeft
+			? LOCTEXT("PackageNameLeftFailed", "Could not resolve the left package name.")
+			: LOCTEXT("PackageNameRightFailed", "Could not resolve the right package name."));
+		return false;
+	}
+	UPackage* Package = FindObject<UPackage>(nullptr, *PackageName);
+	if (!Package)
+	{
+		Package = LoadPackage(nullptr, *PackageName, LOAD_None);
+	}
+	if (!Package)
+	{
+		Session->SetError(bLeft
+			? LOCTEXT("LoadLeftWorkspaceFailed", "Failed to load the left (working copy) package.")
+			: LOCTEXT("LoadRightWorkspaceFailed", "Failed to load the right (working copy) package."));
+		return false;
+	}
+	const FString AssetName = FPaths::GetBaseFilename(AssetFileName);
+	UObject* Found = FindObject<UObject>(Package, *AssetName);
+	if (!Found)
+	{
+		Found = Package->FindAssetInPackage();
+	}
+	UWidgetBlueprint* Blueprint = Cast<UWidgetBlueprint>(Found);
+	if (!Blueprint)
+	{
+		Session->SetError(bLeft
+			? LOCTEXT("FindLeftWorkspaceAssetFailed", "Could not find a widget blueprint in the working copy.")
+			: LOCTEXT("FindRightWorkspaceAssetFailed", "Could not find a widget blueprint in the working copy."));
+		return false;
+	}
+	OutBlueprint = Blueprint;
+	return true;
+}
+
 void FUnrealGitWidgetDiffLauncher::Launch(const FString& AssetFileName, const FString& LeftRevision, const FString& RightRevision, EThumbnailPreviewSizeMode Mode)
 {
 	TSharedPtr<FUnrealGitWidgetDiffSession> Session = MakeShared<FUnrealGitWidgetDiffSession>();
@@ -52,63 +174,8 @@ void FUnrealGitWidgetDiffLauncher::Launch(const FString& AssetFileName, const FS
 		FText RightMatError;
 		bool bRightMatOk = true;
 
-		if (bLeftIsRevision)
-		{
-			ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
-			FSourceControlStatePtr State = Provider.GetState(AssetFileName, EStateCacheUsage::Use);
-			if (!State.IsValid())
-			{
-				bLeftMatOk = false;
-				LeftMatError = LOCTEXT("NoStateLeft", "Could not query source control state for the left revision.");
-			}
-			else
-			{
-				LeftRevisionPtr = State->FindHistoryRevision(LeftRevision);
-				if (!LeftRevisionPtr.IsValid())
-				{
-					bLeftMatOk = false;
-					LeftMatError = LOCTEXT("NoRevisionLeft", "Could not find the left revision in history.");
-				}
-				else if (!LeftRevisionPtr->Get(LeftTempFile))
-				{
-					bLeftMatOk = false;
-					LeftMatError = LOCTEXT("GetLeftFailed", "Failed to materialize the left revision.");
-				}
-				else
-				{
-					LeftDate = LeftRevisionPtr->GetDate();
-				}
-			}
-		}
-
-		if (bRightIsRevision)
-		{
-			ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
-			FSourceControlStatePtr State = Provider.GetState(AssetFileName, EStateCacheUsage::Use);
-			if (!State.IsValid())
-			{
-				bRightMatOk = false;
-				RightMatError = LOCTEXT("NoStateRight", "Could not query source control state for the right revision.");
-			}
-			else
-			{
-				RightRevisionPtr = State->FindHistoryRevision(RightRevision);
-				if (!RightRevisionPtr.IsValid())
-				{
-					bRightMatOk = false;
-					RightMatError = LOCTEXT("NoRevisionRight", "Could not find the right revision in history.");
-				}
-				else if (!RightRevisionPtr->Get(RightTempFile))
-				{
-					bRightMatOk = false;
-					RightMatError = LOCTEXT("GetRightFailed", "Failed to materialize the right revision.");
-				}
-				else
-				{
-					RightDate = RightRevisionPtr->GetDate();
-				}
-			}
-		}
+		MaterializeRevision(AssetFileName, LeftRevision, bLeftIsRevision, true, LeftRevisionPtr, LeftTempFile, LeftDate, LeftMatError, bLeftMatOk);
+		MaterializeRevision(AssetFileName, RightRevision, bRightIsRevision, false, RightRevisionPtr, RightTempFile, RightDate, RightMatError, bRightMatOk);
 
 		AsyncTask(ENamedThreads::GameThread, [Session, AssetFileName, LeftRevision, RightRevision, bLeftIsRevision, bRightIsRevision, Mode,
 			LeftRevisionPtr, LeftDate, LeftMatError, bLeftMatOk,
@@ -126,109 +193,15 @@ void FUnrealGitWidgetDiffLauncher::Launch(const FString& AssetFileName, const FS
 			}
 
 			UWidgetBlueprint* LeftBlueprint = nullptr;
-			if (bLeftIsRevision)
+			if (!ResolveBlueprint(Session, AssetFileName, bLeftIsRevision, true, LeftRevisionPtr, LeftBlueprint))
 			{
-				UPackage* Package = DiffUtils::LoadPackageForDiff(LeftRevisionPtr);
-				if (!Package)
-				{
-					Session->SetError(LOCTEXT("LoadLeftPackageFailed", "Failed to load the left revision package."));
-					return;
-				}
-				const FString AssetName = FPaths::GetBaseFilename(LeftRevisionPtr->GetFilename());
-				LeftBlueprint = Cast<UWidgetBlueprint>(FindObject<UObject>(Package, *AssetName));
-				if (!LeftBlueprint)
-				{
-					LeftBlueprint = Cast<UWidgetBlueprint>(Package->FindAssetInPackage());
-				}
-				if (!LeftBlueprint)
-				{
-					Session->SetError(LOCTEXT("FindLeftAssetFailed", "Could not find a widget blueprint in the left revision."));
-					return;
-				}
-			}
-			else
-			{
-				FString PackageName;
-				if (!FPackageName::TryConvertFilenameToLongPackageName(AssetFileName, PackageName))
-				{
-					Session->SetError(LOCTEXT("PackageNameLeftFailed", "Could not resolve the left package name."));
-					return;
-				}
-				UPackage* Package = FindObject<UPackage>(nullptr, *PackageName);
-				if (!Package)
-				{
-					Package = LoadPackage(nullptr, *PackageName, LOAD_None);
-				}
-				if (!Package)
-				{
-					Session->SetError(LOCTEXT("LoadLeftWorkspaceFailed", "Failed to load the left (working copy) package."));
-					return;
-				}
-				const FString AssetName = FPaths::GetBaseFilename(AssetFileName);
-				UObject* Found = FindObject<UObject>(Package, *AssetName);
-				if (!Found)
-				{
-					Found = Package->FindAssetInPackage();
-				}
-				LeftBlueprint = Cast<UWidgetBlueprint>(Found);
-				if (!LeftBlueprint)
-				{
-					Session->SetError(LOCTEXT("FindLeftWorkspaceAssetFailed", "Could not find a widget blueprint in the working copy."));
-					return;
-				}
+				return;
 			}
 
 			UWidgetBlueprint* RightBlueprint = nullptr;
-			if (bRightIsRevision)
+			if (!ResolveBlueprint(Session, AssetFileName, bRightIsRevision, false, RightRevisionPtr, RightBlueprint))
 			{
-				UPackage* Package = DiffUtils::LoadPackageForDiff(RightRevisionPtr);
-				if (!Package)
-				{
-					Session->SetError(LOCTEXT("LoadRightPackageFailed", "Failed to load the right revision package."));
-					return;
-				}
-				const FString AssetName = FPaths::GetBaseFilename(RightRevisionPtr->GetFilename());
-				RightBlueprint = Cast<UWidgetBlueprint>(FindObject<UObject>(Package, *AssetName));
-				if (!RightBlueprint)
-				{
-					RightBlueprint = Cast<UWidgetBlueprint>(Package->FindAssetInPackage());
-				}
-				if (!RightBlueprint)
-				{
-					Session->SetError(LOCTEXT("FindRightAssetFailed", "Could not find a widget blueprint in the right revision."));
-					return;
-				}
-			}
-			else
-			{
-				FString PackageName;
-				if (!FPackageName::TryConvertFilenameToLongPackageName(AssetFileName, PackageName))
-				{
-					Session->SetError(LOCTEXT("PackageNameRightFailed", "Could not resolve the right package name."));
-					return;
-				}
-				UPackage* Package = FindObject<UPackage>(nullptr, *PackageName);
-				if (!Package)
-				{
-					Package = LoadPackage(nullptr, *PackageName, LOAD_None);
-				}
-				if (!Package)
-				{
-					Session->SetError(LOCTEXT("LoadRightWorkspaceFailed", "Failed to load the right (working copy) package."));
-					return;
-				}
-				const FString AssetName = FPaths::GetBaseFilename(AssetFileName);
-				UObject* Found = FindObject<UObject>(Package, *AssetName);
-				if (!Found)
-				{
-					Found = Package->FindAssetInPackage();
-				}
-				RightBlueprint = Cast<UWidgetBlueprint>(Found);
-				if (!RightBlueprint)
-				{
-					Session->SetError(LOCTEXT("FindRightWorkspaceAssetFailed", "Could not find a widget blueprint in the working copy."));
-					return;
-				}
+				return;
 			}
 
 			TArray<FUnrealGitWidgetNode> Hierarchy = FUnrealGitWidgetDiffHierarchy::Build(LeftBlueprint, RightBlueprint);
