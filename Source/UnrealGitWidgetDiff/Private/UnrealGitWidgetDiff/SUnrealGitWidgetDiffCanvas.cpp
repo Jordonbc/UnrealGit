@@ -1,6 +1,7 @@
 // Copyright (C) 2026 Jordon Brooks. All Rights Reserved.
 
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/SUnrealGitWidgetDiffCanvas.h"
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffStyle.h"
 
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
@@ -104,17 +105,6 @@ namespace
 		AddDashedEdge(OutPoints, FVector2D(Min.X, Max.Y), Min, 6.0f, 4.0f);
 	}
 
-	FLinearColor GetChangeColor(const EUnrealGitWidgetChange Change)
-	{
-		switch (Change)
-		{
-		case EUnrealGitWidgetChange::Added: return FLinearColor(0.15f, 1.0f, 0.25f, 1.0f);
-		case EUnrealGitWidgetChange::Removed: return FLinearColor(1.0f, 0.2f, 0.2f, 1.0f);
-		case EUnrealGitWidgetChange::Modified: return FLinearColor(1.0f, 0.65f, 0.05f, 1.0f);
-		default: return FLinearColor(1.0f, 1.0f, 1.0f, 1.0f);
-		}
-	}
-
 	float GetGridCellSize(const float EffectiveZoom, int32& OutRulePeriod, float& OutNominalGridSize)
 	{
 		OutRulePeriod = FMath::Max(1, (int32)FAppStyle::GetFloat(TEXT("Graph.Panel.GridRulePeriod")));
@@ -167,24 +157,35 @@ void SUnrealGitWidgetDiffCanvas::Construct(const FArguments& InArgs)
 	];
 }
 
-float SUnrealGitWidgetDiffCanvas::ComputeEffectiveZoom() const
+FUnrealGitWidgetDiffCanvasTransform SUnrealGitWidgetDiffCanvas::ComputeTransform(const FVector2D& AllottedSize) const
 {
 	const FUnrealGitWidgetDiffCanvasState& State = GetState();
 	const FVector2D ImageSize = GetImageSize();
-	const FVector2D AllottedSize = GetCachedGeometry().GetLocalSize();
 	const float FitScale = bFitToWindow.Get(false)
 		? FMath::Min(AllottedSize.X / FMath::Max(1.0f, ImageSize.X), AllottedSize.Y / FMath::Max(1.0f, ImageSize.Y))
 		: 1.0f;
-	return FitScale * State.Zoom;
+	const float EffectiveZoom = FitScale * State.Zoom;
+	const FVector2D DrawSize = ImageSize * EffectiveZoom;
+	const FVector2D Position = (AllottedSize - DrawSize) * 0.5f + State.Pan;
+
+	FUnrealGitWidgetDiffCanvasTransform Result;
+	Result.Zoom = EffectiveZoom;
+	Result.DrawSize = DrawSize;
+	Result.Position = Position;
+	return Result;
+}
+
+float SUnrealGitWidgetDiffCanvas::ComputeEffectiveZoom() const
+{
+	const FVector2D AllottedSize = GetCachedGeometry().GetLocalSize();
+	return ComputeTransform(AllottedSize).Zoom;
 }
 
 FVector2D SUnrealGitWidgetDiffCanvas::ComputeViewOffset() const
 {
-	const float Zoom = ComputeEffectiveZoom();
-	const FVector2D ImageSize = GetImageSize();
 	const FVector2D AllottedSize = GetCachedGeometry().GetLocalSize();
-	const FVector2D Position = (AllottedSize - ImageSize * Zoom) * 0.5f + GetState().Pan;
-	return -Position / FMath::Max(0.001f, Zoom);
+	const FUnrealGitWidgetDiffCanvasTransform Transform = ComputeTransform(AllottedSize);
+	return -Transform.Position / FMath::Max(0.001f, Transform.Zoom);
 }
 
 FUnrealGitWidgetDiffCanvasState& SUnrealGitWidgetDiffCanvas::GetState() const
@@ -245,15 +246,11 @@ int32 SUnrealGitWidgetDiffCanvas::OnPaint(
 	const FWidgetStyle& InWidgetStyle,
 	bool bParentEnabled) const
 {
-	const FUnrealGitWidgetDiffCanvasState& State = GetState();
-	const FVector2D ImageSize = GetImageSize();
 	const FVector2D AllottedSize = AllottedGeometry.GetLocalSize();
-	const float FitScale = bFitToWindow.Get(false)
-		? FMath::Min(AllottedSize.X / FMath::Max(1.0f, ImageSize.X), AllottedSize.Y / FMath::Max(1.0f, ImageSize.Y))
-		: 1.0f;
-	const float EffectiveZoom = FitScale * State.Zoom;
-	const FVector2D DrawSize = ImageSize * EffectiveZoom;
-	const FVector2D Position = (AllottedSize - DrawSize) * 0.5f + State.Pan;
+	const FUnrealGitWidgetDiffCanvasTransform Transform = ComputeTransform(AllottedSize);
+	const float EffectiveZoom = Transform.Zoom;
+	const FVector2D DrawSize = Transform.DrawSize;
+	const FVector2D Position = Transform.Position;
 
 	if (!FMath::IsFinite(EffectiveZoom) || EffectiveZoom <= 0.0f || !IsFinitePoint(Position) || !IsFinitePoint(DrawSize))
 	{
@@ -431,10 +428,29 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 	FSlateWindowElementList& OutDrawElements,
 	int32 LayerId) const
 {
-	const FUnrealGitWidgetDiffCanvasState& State = GetState();
+	PaintRulers(AllottedGeometry, Position, EffectiveZoom, OutDrawElements, LayerId);
+
+	PaintDesignBoundary(AllottedGeometry, Position, EffectiveZoom, OutDrawElements, LayerId);
+
+	PaintBitmapOverlay(AllottedGeometry, Position, EffectiveZoom, OutDrawElements, LayerId);
+
+	if (!HighlightNodes.IsValid())
+	{
+		return;
+	}
+
+	PaintChangeOverlays(AllottedGeometry, Position, EffectiveZoom, LiveRects, OutDrawElements, LayerId);
+	PaintSelection(AllottedGeometry, Position, EffectiveZoom, LiveRects, OutDrawElements, LayerId);
+}
+
+void SUnrealGitWidgetDiffCanvas::PaintRulers(
+	const FGeometry& AllottedGeometry,
+	const FVector2D& Position,
+	float EffectiveZoom,
+	FSlateWindowElementList& OutDrawElements,
+	int32 LayerId) const
+{
 	const FVector2D AllottedSize = AllottedGeometry.GetLocalSize();
-	const FVector2D ImageSize = GetImageSize();
-	const FVector2D DrawSize = ImageSize * EffectiveZoom;
 	const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
 
 	// Rulers, drawn over the preview so they remain visible.
@@ -494,6 +510,18 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 				FText::AsNumber(Value), RulerFont, ESlateDrawEffect::None, FLinearColor(0.6f, 0.6f, 0.6f, 0.9f));
 		}
 	}
+}
+
+void SUnrealGitWidgetDiffCanvas::PaintDesignBoundary(
+	const FGeometry& AllottedGeometry,
+	const FVector2D& Position,
+	float EffectiveZoom,
+	FSlateWindowElementList& OutDrawElements,
+	int32 LayerId) const
+{
+	const FVector2D ImageSize = GetImageSize();
+	const FVector2D DrawSize = ImageSize * EffectiveZoom;
+	const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
 
 	// Design-area boundary.
 	if (WhiteBrush && DrawSize.X > 0.0f && DrawSize.Y > 0.0f && DrawSize.X < 100000.0f && DrawSize.Y < 100000.0f)
@@ -506,6 +534,17 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 		Border.Add(Position);
 		FSlateDrawElement::MakeLines(OutDrawElements, LayerId, AllottedGeometry.ToPaintGeometry(), Border, ESlateDrawEffect::None, FLinearColor(1.0f, 1.0f, 1.0f, 0.22f), true, 1.0f);
 	}
+}
+
+void SUnrealGitWidgetDiffCanvas::PaintBitmapOverlay(
+	const FGeometry& AllottedGeometry,
+	const FVector2D& Position,
+	float EffectiveZoom,
+	FSlateWindowElementList& OutDrawElements,
+	int32 LayerId) const
+{
+	const FVector2D ImageSize = GetImageSize();
+	const FVector2D DrawSize = ImageSize * EffectiveZoom;
 
 	// Optional pixel-diff overlay.
 	const FSlateBrush* Overlay = OverlayBrush.Get();
@@ -516,11 +555,20 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 			AllottedGeometry.ToPaintGeometry(DrawSize, FSlateLayoutTransform(Position)),
 			Overlay, ESlateDrawEffect::None, FLinearColor(1.0f, 1.0f, 1.0f, 0.85f));
 	}
+}
 
-	if (!HighlightNodes.IsValid())
-	{
-		return;
-	}
+void SUnrealGitWidgetDiffCanvas::PaintChangeOverlays(
+	const FGeometry& AllottedGeometry,
+	const FVector2D& Position,
+	float EffectiveZoom,
+	const TMap<FString, FBox2D>& LiveRects,
+	FSlateWindowElementList& OutDrawElements,
+	int32 LayerId) const
+{
+	const FVector2D AllottedSize = AllottedGeometry.GetLocalSize();
+	const FVector2D ImageSize = GetImageSize();
+	const FVector2D DrawSize = ImageSize * EffectiveZoom;
+	const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
 
 	auto DrawChangeBadge = [&](const FVector2D& RectMin, const FVector2D& RectMax, const FLinearColor& Color, const EUnrealGitWidgetChange Change)
 	{
@@ -609,7 +657,7 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 		}
 		const FVector2D NodePosition = bLeft ? Node.LeftPosition : Node.RightPosition;
 		const FVector2D NodeSize = bLeft ? Node.LeftSize : Node.RightSize;
-		DrawChangeRect(NodePosition, NodeSize, GetChangeColor(Node.Change), Node.Change);
+		DrawChangeRect(NodePosition, NodeSize, GetChangeOutlineColor(Node.Change), Node.Change);
 	};
 
 	const bool bUseLiveGeometry = PreviewWidget.IsValid();
@@ -626,7 +674,7 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 			// so they track zoom, pan, resize and DPI exactly.
 			if (const FBox2D* LiveRect = LiveRects.Find(Node.Name))
 			{
-				DrawChangeRect(LiveRect->Min, LiveRect->GetSize(), GetChangeColor(Node.Change), Node.Change);
+				DrawChangeRect(LiveRect->Min, LiveRect->GetSize(), GetChangeOutlineColor(Node.Change), Node.Change);
 			}
 			continue;
 		}
@@ -655,6 +703,19 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 		}
 		DrawStoredGeometry(Node, bUseLeftGeometry);
 	}
+}
+
+void SUnrealGitWidgetDiffCanvas::PaintSelection(
+	const FGeometry& AllottedGeometry,
+	const FVector2D& Position,
+	float EffectiveZoom,
+	const TMap<FString, FBox2D>& LiveRects,
+	FSlateWindowElementList& OutDrawElements,
+	int32 LayerId) const
+{
+	const FVector2D ImageSize = GetImageSize();
+	const FVector2D DrawSize = ImageSize * EffectiveZoom;
+	const FSlateBrush* WhiteBrush = FCoreStyle::Get().GetBrush(TEXT("WhiteBrush"));
 
 	const FString& Selected = GetState().SelectedNodeName;
 	if (!Selected.IsEmpty())
@@ -787,9 +848,9 @@ FReply SUnrealGitWidgetDiffCanvas::OnMouseButtonUp(const FGeometry& MyGeometry, 
 		{
 			const FVector2D LocalCursor = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
 			const FVector2D AllottedSize = MyGeometry.GetLocalSize();
-			const FVector2D ImageSize = GetImageSize();
-			const float EffectiveZoom = ComputeEffectiveZoom();
-			const FVector2D Position = (AllottedSize - ImageSize * EffectiveZoom) * 0.5f + GetState().Pan;
+			const FUnrealGitWidgetDiffCanvasTransform Transform = ComputeTransform(AllottedSize);
+			const float EffectiveZoom = Transform.Zoom;
+			const FVector2D Position = Transform.Position;
 			const FVector2D DesignPos = (LocalCursor - Position) / FMath::Max(0.001f, EffectiveZoom);
 
 			auto Contains = [&DesignPos](const FVector2D& NodePosition, const FVector2D& NodeSize)

@@ -17,6 +17,14 @@ struct FUnrealGitWidgetDiffCanvasState
 	FString SelectedNodeName;
 };
 
+/** Effective transform computed for a given allotted size. */
+struct FUnrealGitWidgetDiffCanvasTransform
+{
+	float Zoom = 1.0f;
+	FVector2D DrawSize = FVector2D::ZeroVector;
+	FVector2D Position = FVector2D::ZeroVector;
+};
+
 /**
  * Read-only UMG preview viewport. Hosts the live Slate widget hierarchy so
  * text and geometry stay sharp at any zoom, and draws the UMG Designer grid,
@@ -78,6 +86,11 @@ private:
 	void PaintGrid(const FGeometry& AllottedGeometry, const FVector2D& Position, float EffectiveZoom, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
 	void CollectLiveGeometry(float EffectiveZoom, TMap<FString, FBox2D>& OutRects) const;
 	void PaintOverlays(const FGeometry& AllottedGeometry, const FVector2D& Position, float EffectiveZoom, const TMap<FString, FBox2D>& LiveRects, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
+	void PaintRulers(const FGeometry& AllottedGeometry, const FVector2D& Position, float EffectiveZoom, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
+	void PaintDesignBoundary(const FGeometry& AllottedGeometry, const FVector2D& Position, float EffectiveZoom, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
+	void PaintBitmapOverlay(const FGeometry& AllottedGeometry, const FVector2D& Position, float EffectiveZoom, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
+	void PaintChangeOverlays(const FGeometry& AllottedGeometry, const FVector2D& Position, float EffectiveZoom, const TMap<FString, FBox2D>& LiveRects, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
+	void PaintSelection(const FGeometry& AllottedGeometry, const FVector2D& Position, float EffectiveZoom, const TMap<FString, FBox2D>& LiveRects, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
 
 	TAttribute<const FSlateBrush*> BaseBrush;
 	TAttribute<const FSlateBrush*> OverlayBrush;
@@ -104,6 +117,7 @@ private:
 	int32 PendingFocusTicks = 0;
 	int32 PendingFocusRetries = 0;
 
+	FUnrealGitWidgetDiffCanvasTransform ComputeTransform(const FVector2D& AllottedSize) const;
 	float ComputeEffectiveZoom() const;
 	FVector2D ComputeViewOffset() const;
 	void RebuildZoomPan();

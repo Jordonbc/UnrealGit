@@ -58,6 +58,13 @@ private:
 	void EnsureLivePreviews();
 	void SelectWidgetByName(const FString& Name);
 
+	TSharedRef<SWidget> BuildToolbar();
+	TSharedRef<SWidget> BuildOnionBlendRow();
+	TSharedRef<SWidget> BuildViewer();
+	TSharedRef<SWidget> BuildHierarchyPanel();
+	TSharedRef<SWidget> BuildSummaryPanel();
+	void WireSession();
+
 	bool bFitToWindow = true;
 	bool bSwapped = false;
 	float OnionBlendPercent = 50.0f;

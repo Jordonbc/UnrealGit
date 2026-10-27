@@ -2,6 +2,7 @@
 
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitRevertWorker.h"
 
+#include "UnrealGit.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
 
 FName FGitRevertWorker::GetName() const
@@ -106,6 +107,10 @@ void FGitRevertWorker::Execute(
 		{
 			FString UnlockError;
 			UnrealGit::Workers::UnlockLfsLocks(ProcessRunner, RepoRoot, RelativePaths, false, UnlockError);
+			if (!UnlockError.IsEmpty())
+			{
+				UE_LOG(LogUnrealGit, Verbose, TEXT("Revert: UnlockLfsLocks failed: %s"), *UnlockError);
+			}
 		}
 	}
 

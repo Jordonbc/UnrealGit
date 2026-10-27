@@ -8,19 +8,7 @@
 #include "ISourceControlModule.h"
 
 #include "UnrealGit.h"
-
-namespace
-{
-	FString BytesToTextUtf8Lossy(const TArray<uint8>& Bytes)
-	{
-		if (Bytes.Num() == 0)
-		{
-			return FString();
-		}
-		FUTF8ToTCHAR Converter(reinterpret_cast<const ANSICHAR*>(Bytes.GetData()), Bytes.Num());
-		return FString(Converter.Length(), Converter.Get());
-	}
-}
+#include "UnrealGit/Private/UnrealGit/Git/Parsers/GitParsingUtils.h"
 
 FSystemGitProcessRunner::FSystemGitProcessRunner(FString InGitExecutablePath)
 	: GitExecutablePath(MoveTemp(InGitExecutablePath))
@@ -62,10 +50,8 @@ FString FSystemGitProcessRunner::BuildCommandLine(const TArray<FString>& Argumen
 	return CommandLine;
 }
 
-FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request)
+FGitProcessResult FSystemGitProcessRunner::RunProcessOnce(const FString& Params, const FGitProcessRequest& Request, double TimeoutSeconds, const FString& GitExecutablePath)
 {
-	check(!IsInGameThread());
-
 	FGitProcessResult Result;
 	const double StartSeconds = FPlatformTime::Seconds();
 
@@ -83,27 +69,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 		FPlatformProcess::ClosePipe(StdErrReadPipe, StdErrWritePipe);
 	};
 
-	// If RepoRoot is set, automatically prepend "-C <RepoRoot>" to arguments
-	TArray<FString> FinalArguments = Request.Arguments;
-	if (!Request.RepoRoot.IsEmpty())
-	{
-		FinalArguments.Insert(TEXT("-C"), 0);
-		FinalArguments.Insert(Request.RepoRoot, 1);
-
-		// Clean up any stale index.lock file to prevent "Another git process" errors
-		const FString IndexLockPath = FPaths::Combine(Request.RepoRoot, TEXT(".git"), TEXT("index.lock"));
-		if (IFileManager::Get().FileExists(*IndexLockPath))
-		{
-			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UnrealGit: Removing stale index.lock file"));
-			IFileManager::Get().Delete(*IndexLockPath, false, true, true);
-		}
-	}
-
-	const FString Params = BuildCommandLine(FinalArguments);
 	uint32 ProcessId = 0;
-
-	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UnrealGit: Running git: executable='%s', args='%s', workdir='%s'"),
-		*GitExecutablePath, *Params, Request.WorkingDirectory.IsEmpty() ? TEXT("(null)") : *Request.WorkingDirectory);
 
 	FProcHandle Handle = FPlatformProcess::CreateProc(
 		*GitExecutablePath,
@@ -149,7 +115,6 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 #endif
 	};
 
-	const double TimeoutSeconds = Request.Timeout.IsSet() ? Request.Timeout->GetTotalSeconds() : FSystemGitProcessRunner::DefaultTimeoutSeconds;
 	while (FPlatformProcess::IsProcRunning(Handle))
 	{
 		ReadAllAvailable(StdOutReadPipe, Result.StdOut);
@@ -177,45 +142,81 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 	}
 	Result.ExitCode = ExitCode;
 
-	const FString StdErr = BytesToTextUtf8Lossy(Result.StdErr);
+	Result.Duration = FTimespan::FromSeconds(FPlatformTime::Seconds() - StartSeconds);
+	return Result;
+}
 
-	if (ExitCode == 128 && StdErr.Contains(TEXT("index.lock")) && !Request.RepoRoot.IsEmpty())
+void FSystemGitProcessRunner::EnsureStaleIndexLockRemoved(const FString& WorkingDirectory)
+{
+	IFileManager::Get().Delete(*FPaths::Combine(WorkingDirectory, TEXT(".git"), TEXT("index.lock")), false, true, true);
+}
+
+FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request)
+{
+	check(!IsInGameThread());
+
+	FGitProcessResult Result;
+	const double StartSeconds = FPlatformTime::Seconds();
+
+	// If RepoRoot is set, automatically prepend "-C <RepoRoot>" to arguments
+	TArray<FString> FinalArguments = Request.Arguments;
+	if (!Request.RepoRoot.IsEmpty())
+	{
+		FinalArguments.Insert(TEXT("-C"), 0);
+		FinalArguments.Insert(Request.RepoRoot, 1);
+
+		// Clean up any stale index.lock file to prevent "Another git process" errors
+		const FString IndexLockPath = FPaths::Combine(Request.RepoRoot, TEXT(".git"), TEXT("index.lock"));
+		if (IFileManager::Get().FileExists(*IndexLockPath))
+		{
+			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UnrealGit: Removing stale index.lock file"));
+			IFileManager::Get().Delete(*IndexLockPath, false, true, true);
+		}
+	}
+
+	const FString Params = BuildCommandLine(FinalArguments);
+
+	const double TimeoutSeconds = Request.Timeout.IsSet() ? Request.Timeout->GetTotalSeconds() : FSystemGitProcessRunner::DefaultTimeoutSeconds;
+
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UnrealGit: Running git: executable='%s', args='%s', workdir='%s'"),
+		*GitExecutablePath, *Params, Request.WorkingDirectory.IsEmpty() ? TEXT("(null)") : *Request.WorkingDirectory);
+
+	Result = RunProcessOnce(Params, Request, TimeoutSeconds, GitExecutablePath);
+
+	// Detect launch failure handled inside helper.
+	const FString StdErrText = UnrealGit::Parsing::Utf8BytesToString(Result.StdErr);
+	if (Result.ExitCode == -1 && StdErrText.Contains(TEXT("Failed to launch git process")))
+	{
+		Result.Duration = FTimespan::FromSeconds(FPlatformTime::Seconds() - StartSeconds);
+		return Result;
+	}
+
+	if (Result.ExitCode == 128 && StdErrText.Contains(TEXT("index.lock")) && !Request.RepoRoot.IsEmpty())
 	{
 		UE_LOG(LogUnrealGit, Verbose, TEXT("UnrealGit: index.lock conflict detected, retrying after brief delay..."));
 		FPlatformProcess::Sleep(0.1f);
 
-		IFileManager::Get().Delete(*FPaths::Combine(Request.RepoRoot, TEXT(".git"), TEXT("index.lock")), false, true, true);
+		EnsureStaleIndexLockRemoved(Request.RepoRoot);
 
-		Handle = FPlatformProcess::CreateProc(
-			*GitExecutablePath,
-			*Params,
-			false, true, true,
-			&ProcessId, 0,
-			Request.WorkingDirectory.IsEmpty() ? nullptr : *Request.WorkingDirectory,
-			StdOutWritePipe,
-			nullptr,
-			StdErrWritePipe);
+		FGitProcessResult RetryResult = RunProcessOnce(Params, Request, 0.0, GitExecutablePath);
 
-		if (Handle.IsValid())
+		const FString RetryStdErrText = UnrealGit::Parsing::Utf8BytesToString(RetryResult.StdErr);
+		const bool bRetryLaunchFailed = RetryResult.ExitCode == -1 && RetryStdErrText.Contains(TEXT("Failed to launch git process"));
+
+		if (!bRetryLaunchFailed)
 		{
-			while (FPlatformProcess::IsProcRunning(Handle))
+			// Accumulate retry output onto the original result, mirroring the previous in-place drain.
+			Result.StdOut.Append(RetryResult.StdOut);
+			Result.StdErr.Append(RetryResult.StdErr);
+			if (RetryResult.bWasCanceled)
 			{
-				ReadAllAvailable(StdOutReadPipe, Result.StdOut);
-				ReadAllAvailable(StdErrReadPipe, Result.StdErr);
-				FPlatformProcess::Sleep(0.01f);
+				Result.bWasCanceled = true;
 			}
-			ReadAllAvailable(StdOutReadPipe, Result.StdOut);
-			ReadAllAvailable(StdErrReadPipe, Result.StdErr);
-
-			if (!FPlatformProcess::GetProcReturnCode(Handle, &ExitCode))
-			{
-				ExitCode = -1;
-			}
-			Result.ExitCode = ExitCode;
+			Result.ExitCode = RetryResult.ExitCode;
 		}
 	}
 
 	Result.Duration = FTimespan::FromSeconds(FPlatformTime::Seconds() - StartSeconds);
-	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UnrealGit: git completed: exit=%d, duration=%.3fs"), ExitCode, Result.Duration.GetTotalSeconds());
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UnrealGit: git completed: exit=%d, duration=%.3fs"), Result.ExitCode, Result.Duration.GetTotalSeconds());
 	return Result;
 }

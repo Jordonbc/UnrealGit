@@ -34,20 +34,8 @@ void FGitMarkForAddWorker::Execute(
 		return;
 	}
 
-	TArray<FString> RelativePaths;
-	FString ConvertError;
-	if (!UnrealGit::Workers::TryMakeRepoRelativePaths(RepoRoot, Files, RelativePaths, ConvertError))
+	if (!UnrealGit::Workers::RunGitForFiles(ProcessRunner, RepoRoot, { TEXT("add"), TEXT("-N") }, Files, OutOutput))
 	{
-		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(ConvertError.IsEmpty() ? TEXT("File is outside the Git repository root.") : ConvertError);
-		return;
-	}
-
-	FString AddError;
-	if (!UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, { TEXT("add"), TEXT("-N") }, RelativePaths, AddError))
-	{
-		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(AddError);
 		return;
 	}
 

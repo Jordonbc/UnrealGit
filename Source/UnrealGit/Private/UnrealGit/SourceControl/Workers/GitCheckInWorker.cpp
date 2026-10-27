@@ -4,6 +4,7 @@
 
 #include "HAL/FileManager.h"
 #include "Misc/FileHelper.h"
+#include "UnrealGit.h"
 #include "Misc/ScopeExit.h"
 #include "SourceControlOperations.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
@@ -92,6 +93,10 @@ void FGitCheckInWorker::Execute(
 		{
 			FString UnlockError;
 			UnrealGit::Workers::UnlockLfsLocks(ProcessRunner, RepoRoot, RelativePaths, false, UnlockError);
+			if (!UnlockError.IsEmpty())
+			{
+				UE_LOG(LogUnrealGit, Verbose, TEXT("CheckIn: UnlockLfsLocks failed: %s"), *UnlockError);
+			}
 		}
 
 		UnrealGit::Workers::CompleteWorkerSuccess(OutOutput, RepoRoot, Files);
@@ -200,6 +205,10 @@ void FGitCheckInWorker::Execute(
 		// Submitting releases the LFS lock acquired by checkout (best effort).
 		FString UnlockError;
 		UnrealGit::Workers::UnlockLfsLocks(ProcessRunner, RepoRoot, RelativePaths, false, UnlockError);
+		if (!UnlockError.IsEmpty())
+		{
+			UE_LOG(LogUnrealGit, Verbose, TEXT("CheckIn: UnlockLfsLocks failed: %s"), *UnlockError);
+		}
 	}
 
 	UnrealGit::Workers::CompleteWorkerSuccess(OutOutput, RepoRoot, Files);

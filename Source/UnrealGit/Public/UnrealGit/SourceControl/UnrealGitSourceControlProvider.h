@@ -157,6 +157,12 @@ private:
 	void ApplyLfsLocksToStates(const TOptional<struct FGitStatusSnapshot>& Snapshot, const TArray<struct FGitLfsLock>& Locks);
 	void ReconcileWorkerOutput(const FSourceControlOperationRef& Operation, const TArray<FString>& Files, const FSourceControlOperationComplete& Delegate, const struct FUnrealGitWorkerOutput& Output);
 
+	void ApplyStatusSnapshot(const FSourceControlOperationRef& Operation, const TArray<FString>& Files, const FUnrealGitWorkerOutput& Output, bool& bAnyStateChanged);
+	void ApplyLockState(const FSourceControlOperationRef& Operation, const TArray<FString>& Files, const FUnrealGitWorkerOutput& Output, bool& bAnyStateChanged);
+	void ApplyReadOnlyPolicy(const FUnrealGitWorkerOutput& Output);
+	void BuildHistory(const FUnrealGitWorkerOutput& Output, bool& bAnyStateChanged);
+	void NotifyDelegate(const FSourceControlOperationRef& Operation, const FSourceControlOperationComplete& Delegate, const FUnrealGitWorkerOutput& Output, bool& bAnyStateChanged);
+
 	/** Applies checkout/lock state to the given files after a successful operation. */
 	void ApplyOperationStateToFiles(const TArray<FString>& Files, bool bCheckedOut, EGitLockState LockState, bool& bAnyStateChanged);
 

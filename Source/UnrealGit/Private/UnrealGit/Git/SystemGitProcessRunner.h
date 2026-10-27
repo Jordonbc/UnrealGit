@@ -25,5 +25,6 @@ private:
 	FString GitExecutablePath;
 
 	static FString BuildCommandLine(const TArray<FString>& Arguments);
+	static FGitProcessResult RunProcessOnce(const FString& Params, const FGitProcessRequest& Request, double TimeoutSeconds, const FString& GitExecutablePath);
+	static void EnsureStaleIndexLockRemoved(const FString& WorkingDirectory);
 };
-

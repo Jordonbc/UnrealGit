@@ -34,20 +34,8 @@ void FGitResolveWorker::Execute(
 		return;
 	}
 
-	TArray<FString> Relative;
-	FString ConversionError;
-	if (!UnrealGit::Workers::TryMakeRepoRelativePaths(RepoRoot, Files, Relative, ConversionError))
+	if (!UnrealGit::Workers::RunGitForFiles(ProcessRunner, RepoRoot, { TEXT("add") }, Files, OutOutput))
 	{
-		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(ConversionError);
-		return;
-	}
-
-	FString GitError;
-	if (!UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, { TEXT("add") }, Relative, GitError))
-	{
-		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(GitError);
 		return;
 	}
 

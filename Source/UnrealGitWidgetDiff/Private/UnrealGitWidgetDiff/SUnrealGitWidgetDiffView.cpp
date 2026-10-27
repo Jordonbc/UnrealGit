@@ -26,6 +26,8 @@
 
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/SUnrealGitWidgetDiffCanvas.h"
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffLauncher.h"
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffPreviewFactory.h"
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffStyle.h"
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffTab.h"
 #include "UnrealGitWidgetDiff/UnrealGitWidgetDiffSession.h"
 #include "UnrealGitWidgetDiff/UnrealGitWidgetDiffTypes.h"
@@ -74,6 +76,47 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 
 		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f)
 		[
+			BuildToolbar()
+		]
+
+		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f)
+		[
+			BuildOnionBlendRow()
+		]
+
+		+ SVerticalBox::Slot().FillHeight(1.0f)
+		[
+			SNew(SHorizontalBox)
+			// Left: read-only hierarchy tree.
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				BuildHierarchyPanel()
+			]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[ SNew(SSeparator).Orientation(Orient_Vertical) ]
+			// Center: dual preview canvases.
+			+ SHorizontalBox::Slot().FillWidth(1.0f)
+			[
+					BuildViewer()
+			]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[ SNew(SSeparator).Orientation(Orient_Vertical) ]
+			// Right: read-only changed-properties list.
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				BuildSummaryPanel()
+			]
+		]
+
+		]
+	];
+
+	WireSession();
+}
+
+TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildToolbar()
+{
+	return
 			SNew(SHorizontalBox)
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f)
 			[
@@ -180,10 +223,12 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 				SNew(SButton).OnClicked(this, &SUnrealGitWidgetDiffView::OnCloseClicked)
 				[ SNew(SImage).Image(FAppStyle::GetBrush(TEXT("Icons.Close"))) ]
 			]
-		]
+	;
+}
 
-		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f)
-		[
+TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildOnionBlendRow()
+{
+	return
 			SNew(SHorizontalBox)
 			.Visibility_Lambda([this]() { return IsOnionMode() ? EVisibility::Visible : EVisibility::Collapsed; })
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f)
@@ -197,33 +242,12 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f)
 			[ SNew(STextBlock).Text_Lambda([this]() { return FText::Format(LOCTEXT("BlendValue", "{0}%"), FText::AsNumber(FMath::RoundToInt(OnionBlendPercent))); }) ]
-		]
+	;
+}
 
-		+ SVerticalBox::Slot().FillHeight(1.0f)
-		[
-			SNew(SHorizontalBox)
-			// Left: read-only hierarchy tree.
-			+ SHorizontalBox::Slot().AutoWidth()
-			[
-				SNew(SBox).WidthOverride(260.0f)
-				[
-					SNew(SBorder).Padding(4.0f)
-					[
-						SAssignNew(HierarchyList, STreeView<TSharedPtr<FUnrealGitWidgetNode>>)
-						.TreeItemsSource(&HierarchyRoots)
-						.OnGenerateRow(this, &SUnrealGitWidgetDiffView::OnGenerateHierarchyRow)
-						.OnGetChildren(this, &SUnrealGitWidgetDiffView::OnGetHierarchyChildren)
-						.OnSelectionChanged(this, &SUnrealGitWidgetDiffView::OnHierarchySelectionChanged)
-						.OnMouseButtonClick(this, &SUnrealGitWidgetDiffView::OnHierarchyRowClicked)
-						.SelectionMode(ESelectionMode::Single)
-					]
-				]
-			]
-			+ SHorizontalBox::Slot().AutoWidth()
-			[ SNew(SSeparator).Orientation(Orient_Vertical) ]
-			// Center: dual preview canvases.
-			+ SHorizontalBox::Slot().FillWidth(1.0f)
-			[
+TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildViewer()
+{
+	return
 					SAssignNew(Switcher, SWidgetSwitcher)
 					.WidgetIndex_Lambda([this]() { return GetSwitcherIndex(); })
 
@@ -238,7 +262,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 							if (Session.IsValid())
 							{
 								if (!Session->StatusMessage.IsEmpty()) return Session->StatusMessage;
-								if (!Session->Result.Error.IsEmpty()) return Session->Result.Error;
+								if (!Session->GetResult().Error.IsEmpty()) return Session->GetResult().Error;
 							}
 							return LOCTEXT("Error", "Error");
 						})
@@ -311,12 +335,31 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 					[ SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
 						[ SNew(SImage).Image(this, &SUnrealGitWidgetDiffView::GetRightBrush)
 							.ColorAndOpacity_Lambda([this]() { return FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, OnionBlendPercent / 100.0f)); }) ] ]
-			]
-			+ SHorizontalBox::Slot().AutoWidth()
-			[ SNew(SSeparator).Orientation(Orient_Vertical) ]
-			// Right: read-only changed-properties list.
-			+ SHorizontalBox::Slot().AutoWidth()
-			[
+	;
+}
+
+TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildHierarchyPanel()
+{
+	return
+				SNew(SBox).WidthOverride(260.0f)
+				[
+					SNew(SBorder).Padding(4.0f)
+					[
+						SAssignNew(HierarchyList, STreeView<TSharedPtr<FUnrealGitWidgetNode>>)
+						.TreeItemsSource(&HierarchyRoots)
+						.OnGenerateRow(this, &SUnrealGitWidgetDiffView::OnGenerateHierarchyRow)
+						.OnGetChildren(this, &SUnrealGitWidgetDiffView::OnGetHierarchyChildren)
+						.OnSelectionChanged(this, &SUnrealGitWidgetDiffView::OnHierarchySelectionChanged)
+						.OnMouseButtonClick(this, &SUnrealGitWidgetDiffView::OnHierarchyRowClicked)
+						.SelectionMode(ESelectionMode::Single)
+					]
+				]
+	;
+}
+
+TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildSummaryPanel()
+{
+	return
 				SNew(SBox).WidthOverride(300.0f)
 				[
 					SNew(SBorder).Padding(4.0f)
@@ -349,12 +392,11 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 						]
 					]
 				]
-			]
-		]
+	;
+}
 
-		]
-	];
-
+void SUnrealGitWidgetDiffView::WireSession()
+{
 	UpdateBrushes();
 	EnsureLivePreviews();
 	RebuildHierarchy();
@@ -528,62 +570,13 @@ void SUnrealGitWidgetDiffView::NavigateChange(int32 Direction)
 
 void SUnrealGitWidgetDiffView::EnsureLivePreviews()
 {
-	if (bLivePreviewsBuilt || !Session.IsValid() || Session->State != EUnrealGitWidgetDiffState::Ready || !Session->Images.IsValid())
+	if (bLivePreviewsBuilt || !Session.IsValid() || Session->State != EUnrealGitWidgetDiffState::Ready || Session->GetImages() == nullptr)
 	{
 		return;
 	}
 
-	auto Build = [](UWidgetBlueprint* Blueprint, TStrongObjectPtr<UUserWidget>& OutWidget, TSharedPtr<SWidget>& OutSlate, FVector2D& OutSize)
-	{
-		if (!Blueprint || !Blueprint->GeneratedClass)
-		{
-			return;
-		}
-		UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
-		if (!World)
-		{
-			return;
-		}
-
-		UUserWidget* Widget = NewObject<UUserWidget>(World, Blueprint->GeneratedClass, NAME_None, RF_Transient);
-		if (!Widget)
-		{
-			return;
-		}
-		Widget->SetDesignerFlags(EWidgetDesignFlags::Designing | EWidgetDesignFlags::ExecutePreConstruct);
-		Widget->SetVisibility(ESlateVisibility::HitTestInvisible);
-		if (!Widget->Initialize())
-		{
-			return;
-		}
-
-		TSharedPtr<SWidget> SlateWidget = Widget->TakeWidget();
-		if (!SlateWidget.IsValid())
-		{
-			return;
-		}
-
-		TSharedRef<SVirtualWindow> Window = SNew(SVirtualWindow);
-		Window->SetContent(SlateWidget.ToSharedRef());
-		Window->Resize(FVector2D(1024.0f, 1024.0f));
-		Window->SlatePrepass(1.0f);
-		const FVector2D UnscaledSize = FWidgetBlueprintEditorUtils::GetWidgetPreviewUnScaledCustomSize(
-			Window->GetDesiredSize(),
-			Widget,
-			TOptional<FVector2D>(),
-			EThumbnailPreviewSizeMode::MatchDesignerMode);
-
-		OutWidget = TStrongObjectPtr<UUserWidget>(Widget);
-		OutSlate = SlateWidget;
-		OutSize = (FMath::IsFinite(UnscaledSize.X) && FMath::IsFinite(UnscaledSize.Y) &&
-			UnscaledSize.X > 0.0f && UnscaledSize.Y > 0.0f &&
-			UnscaledSize.X < 16384.0f && UnscaledSize.Y < 16384.0f)
-			? UnscaledSize
-			: FVector2D(1280.0f, 720.0f);
-	};
-
-	Build(Session->Images->LeftBlueprint, LeftLiveWidget, LeftPreviewWidget, LeftDesignSize);
-	Build(Session->Images->RightBlueprint, RightLiveWidget, RightPreviewWidget, RightDesignSize);
+	CreatePreviewWidget(Session->GetImages()->LeftBlueprint, EThumbnailPreviewSizeMode::MatchDesignerMode, LeftLiveWidget, LeftPreviewWidget, LeftDesignSize);
+	CreatePreviewWidget(Session->GetImages()->RightBlueprint, EThumbnailPreviewSizeMode::MatchDesignerMode, RightLiveWidget, RightPreviewWidget, RightDesignSize);
 	bLivePreviewsBuilt = true;
 
 	if (LeftCanvas.IsValid())
@@ -630,12 +623,12 @@ void SUnrealGitWidgetDiffView::UpdateBrushes()
 	UTexture2D* DiffTex = nullptr;
 	UTexture2D* HighlightTex = nullptr;
 
-	if (Session.IsValid() && Session->Images.IsValid())
+	if (Session.IsValid() && Session->GetImages() != nullptr)
 	{
-		LeftTex = Session->Images->LeftTexture;
-		RightTex = Session->Images->RightTexture;
-		DiffTex = Session->Images->DiffTexture;
-		HighlightTex = Session->Images->HighlightTexture;
+		LeftTex = Session->GetImages()->LeftTexture;
+		RightTex = Session->GetImages()->RightTexture;
+		DiffTex = Session->GetImages()->DiffTexture;
+		HighlightTex = Session->GetImages()->HighlightTexture;
 	}
 
 	if (bSwapped)
@@ -674,7 +667,7 @@ void SUnrealGitWidgetDiffView::RebuildHierarchy()
 	{
 		CanvasNodes = MakeShared<TArray<FUnrealGitWidgetNode>>();
 	}
-	*CanvasNodes = Session->Result.Hierarchy;
+	*CanvasNodes = Session->GetResult().Hierarchy;
 
 	int32 AddedCount = 0;
 	int32 RemovedCount = 0;
@@ -704,12 +697,12 @@ void SUnrealGitWidgetDiffView::RebuildHierarchy()
 	HierarchyRoots.Reset();
 
 	TSet<FString> Names;
-	for (const FUnrealGitWidgetNode& Node : Session->Result.Hierarchy)
+	for (const FUnrealGitWidgetNode& Node : Session->GetResult().Hierarchy)
 	{
 		Names.Add(Node.Name);
 	}
 
-	for (const FUnrealGitWidgetNode& Node : Session->Result.Hierarchy)
+	for (const FUnrealGitWidgetNode& Node : Session->GetResult().Hierarchy)
 	{
 		TSharedPtr<FUnrealGitWidgetNode> Item = MakeShared<FUnrealGitWidgetNode>(Node);
 		HierarchyItems.Add(Item);
@@ -757,13 +750,7 @@ TSharedRef<ITableRow> SUnrealGitWidgetDiffView::OnGenerateHierarchyRow(TSharedPt
 	FLinearColor Color(0.7f, 0.7f, 0.7f, 1.0f);
 	if (Item.IsValid())
 	{
-		switch (Item->Change)
-		{
-		case EUnrealGitWidgetChange::Added: Color = FLinearColor(0.3f, 0.9f, 0.3f, 1.0f); break;
-		case EUnrealGitWidgetChange::Removed: Color = FLinearColor(1.0f, 0.3f, 0.3f, 1.0f); break;
-		case EUnrealGitWidgetChange::Modified: Color = FLinearColor(1.0f, 0.8f, 0.2f, 1.0f); break;
-		default: Color = FLinearColor(0.75f, 0.75f, 0.75f, 1.0f); break;
-		}
+		Color = GetChangeColor(Item->Change);
 	}
 
 	const float Indent = Item.IsValid() ? Item->Depth * 12.0f : 0.0f;
@@ -784,7 +771,7 @@ void SUnrealGitWidgetDiffView::RebuildDiffEntries()
 	AllDiffEntries.Reset();
 	if (Session.IsValid() && Session->State == EUnrealGitWidgetDiffState::Ready)
 	{
-		for (const FUnrealGitWidgetNode& Node : Session->Result.Hierarchy)
+		for (const FUnrealGitWidgetNode& Node : Session->GetResult().Hierarchy)
 		{
 			if (Node.Change == EUnrealGitWidgetChange::Unchanged)
 			{
@@ -887,13 +874,8 @@ TSharedRef<ITableRow> SUnrealGitWidgetDiffView::OnGeneratePropertyRow(TSharedPtr
 	FString Glyph = TEXT("~");
 	if (Item.IsValid())
 	{
-		switch (Item->Change)
-		{
-		case EUnrealGitWidgetChange::Added: Color = FLinearColor(0.2f, 0.8f, 0.2f, 1.0f); Glyph = TEXT("+"); break;
-		case EUnrealGitWidgetChange::Removed: Color = FLinearColor(0.9f, 0.2f, 0.2f, 1.0f); Glyph = TEXT("-"); break;
-		case EUnrealGitWidgetChange::Modified: Color = FLinearColor(0.95f, 0.75f, 0.1f, 1.0f); Glyph = TEXT("~"); break;
-		default: break;
-		}
+		Color = GetChangeBadgeColor(Item->Change);
+		Glyph = GetChangeGlyph(Item->Change);
 	}
 
 	return SNew(STableRow<TSharedPtr<FDiffEntry>>, OwnerTable)
@@ -1002,7 +984,7 @@ FText SUnrealGitWidgetDiffView::GetLeftLabel() const
 {
 	if (Session.IsValid())
 	{
-		return bSwapped ? Session->Result.Right.Label : Session->Result.Left.Label;
+		return bSwapped ? Session->GetResult().Right.Label : Session->GetResult().Left.Label;
 	}
 	return FText::GetEmpty();
 }
@@ -1011,7 +993,7 @@ FText SUnrealGitWidgetDiffView::GetRightLabel() const
 {
 	if (Session.IsValid())
 	{
-		return bSwapped ? Session->Result.Left.Label : Session->Result.Right.Label;
+		return bSwapped ? Session->GetResult().Left.Label : Session->GetResult().Right.Label;
 	}
 	return FText::GetEmpty();
 }
