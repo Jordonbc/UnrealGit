@@ -5,10 +5,8 @@
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitLfsLocksParserTest, "UnrealGit.Parsers.LfsLocksJson", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitLfsLocksParserTest::RunTest(const FString& Parameters)
+bool FUnrealGitLfsLocksParserTest::RunTest(const FString&)
 {
-	(void)Parameters;
-
 	const FString Json = TEXT("{\"locks\":[{\"id\":\"1\",\"path\":\"Content/Test.uasset\",\"locked_at\":\"2025-01-01T12:00:00Z\",\"owner\":{\"name\":\"Alice\",\"email\":\"alice@example.com\"}}]}");
 	TArray<FGitLfsLock> Locks;
 	FString Error;
@@ -21,10 +19,8 @@ bool FUnrealGitLfsLocksParserTest::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitLfsLocksParserArrayTest, "UnrealGit.Parsers.LfsLocksJsonArray", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitLfsLocksParserArrayTest::RunTest(const FString& Parameters)
+bool FUnrealGitLfsLocksParserArrayTest::RunTest(const FString&)
 {
-	(void)Parameters;
-
 	// Actual `git lfs locks --json` output: a bare array, owner without email.
 	const FString Json = TEXT("[{\"id\":\"13\",\"path\":\"Content/Blueprints/BP_GraphicsSettings.uasset\",\"owner\":{\"name\":\"jordonbc\"},\"locked_at\":\"2026-10-27T11:46:21Z\"}]");
 	TArray<FGitLfsLock> Locks;

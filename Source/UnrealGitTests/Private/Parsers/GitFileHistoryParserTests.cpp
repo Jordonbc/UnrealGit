@@ -5,10 +5,8 @@
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitFileHistoryParserTest, "UnrealGit.Parsers.FileHistoryRename", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitFileHistoryParserTest::RunTest(const FString& Parameters)
+bool FUnrealGitFileHistoryParserTest::RunTest(const FString&)
 {
-	(void)Parameters;
-
 	TArray<uint8> Bytes;
 	const uint8 RS = 0x1E;
 	const TCHAR US = 0x001F;
@@ -44,10 +42,8 @@ bool FUnrealGitFileHistoryParserTest::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitFileHistoryParserActionsTest, "UnrealGit.Parsers.FileHistoryActions", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitFileHistoryParserActionsTest::RunTest(const FString& Parameters)
+bool FUnrealGitFileHistoryParserActionsTest::RunTest(const FString&)
 {
-	(void)Parameters;
-
 	TArray<uint8> Bytes;
 	const uint8 RS = 0x1E;
 	const TCHAR US = 0x001F;
@@ -103,10 +99,8 @@ bool FUnrealGitFileHistoryParserActionsTest::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitFileHistoryParserSizeMappingTest, "UnrealGit.Parsers.FileHistorySizeMapping", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitFileHistoryParserSizeMappingTest::RunTest(const FString& Parameters)
+bool FUnrealGitFileHistoryParserSizeMappingTest::RunTest(const FString&)
 {
-	(void)Parameters;
-
 	TArray<FGitFileRevision> History;
 	FGitFileRevision R1;
 	R1.Revision.CommitId = TEXT("c1");
