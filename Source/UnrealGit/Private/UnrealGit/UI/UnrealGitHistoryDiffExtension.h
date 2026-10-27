@@ -20,15 +20,19 @@ public:
 	static void Unregister();
 
 private:
-	/** Populates the diff menu with available actions. */
+	/** Populates the diff menu with available actions.
+	 * @param InMenu Menu to populate. */
 	static void PopulateDiffMenu(UToolMenu* InMenu);
 
-	/** Diffs the selected revision against the workspace version. */
+	/** Diffs the selected revision against the workspace version.
+	 * @param Selected Selected history items. */
 	static void OnDiffAgainstWorkspace(TArray<USourceControlHistoryWidgetContext::SelectedItem> Selected);
 
-	/** Diffs the two selected revisions. */
+	/** Diffs the two selected revisions.
+	 * @param Selected Selected history items. */
 	static void OnDiffSelected(TArray<USourceControlHistoryWidgetContext::SelectedItem> Selected);
 
-	/** Diffs the selected revision against its previous revision. */
+	/** Diffs the selected revision against its previous revision.
+	 * @param Selected Selected history items. */
 	static void OnDiffAgainstPrevious(TArray<USourceControlHistoryWidgetContext::SelectedItem> Selected);
 };
