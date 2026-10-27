@@ -7,7 +7,7 @@
 #include "Serialization/JsonSerializer.h"
 #include "UnrealGit/Private/UnrealGit/Git/Parsers/GitParsingUtils.h"
 
-	bool FGitLfsLocksParser::ParseJson(const FString& StdOutText, TArray<FGitLfsLock>& OutLocks, FString& OutError)
+bool FGitLfsLocksParser::ParseJson(const FString& StdOutText, TArray<FGitLfsLock>& OutLocks, FString& OutError)
 {
 	OutLocks.Reset();
 	OutError.Reset();
