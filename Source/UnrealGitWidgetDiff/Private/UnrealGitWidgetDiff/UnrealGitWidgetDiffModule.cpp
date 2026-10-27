@@ -4,13 +4,13 @@
 
 #include "Framework/Docking/TabManager.h"
 #include "Modules/ModuleManager.h"
-#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/SUnrealGitWidgetDiffView.h"
-#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffTab.h"
-#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffAssetContextMenuExtension.h"
-#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffHistoryExtension.h"
-#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffToolbarExtension.h"
 #include "Widgets/Docking/SDockTab.h"
 
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/SUnrealGitWidgetDiffView.h"
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffAssetContextMenuExtension.h"
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffHistoryExtension.h"
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffTab.h"
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffToolbarExtension.h"
 #include "UnrealGitWidgetDiff/UnrealGitWidgetDiffSession.h"
 
 #define LOCTEXT_NAMESPACE "UnrealGitWidgetDiffModule"
