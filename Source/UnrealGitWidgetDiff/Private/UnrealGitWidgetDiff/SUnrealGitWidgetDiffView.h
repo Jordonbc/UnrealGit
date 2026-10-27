@@ -179,6 +179,11 @@ private:
 	/** True when the diff contains at least one changed widget to navigate to. @return True when changes exist. */
 	bool HasChanges() const;
 	/**
+	 * Describes the selected change's position within the navigable change list.
+	 * @return Text such as "Change 3 of 17"; a placeholder when nothing is selected or there are no changes.
+	 */
+	FText GetChangeCounterText() const;
+	/**
 	 * @struct FDiffEntry
 	 * One row in the changed-properties summary list.
 	 */

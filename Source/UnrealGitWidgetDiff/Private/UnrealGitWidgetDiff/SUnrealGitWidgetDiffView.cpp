@@ -196,6 +196,11 @@ TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildToolbar()
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f)
 			[
+				SNew(STextBlock)
+				.Text_Lambda([this]() { return GetChangeCounterText(); })
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f)
+			[
 				SNew(SCheckBox)
 				.IsChecked_Lambda([this]() { return bFitToWindow ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
 				.OnCheckStateChanged(this, &SUnrealGitWidgetDiffView::OnFitChanged)
@@ -474,6 +479,46 @@ bool SUnrealGitWidgetDiffView::HasChanges() const
 		}
 	}
 	return false;
+}
+
+FText SUnrealGitWidgetDiffView::GetChangeCounterText() const
+{
+	int32 TotalChanges = 0;
+	int32 SelectedIndex = INDEX_NONE;
+
+	TArray<TSharedPtr<FUnrealGitWidgetNode>> SelectedItems;
+	if (HierarchyList.IsValid())
+	{
+		SelectedItems = HierarchyList->GetSelectedItems();
+	}
+	const TSharedPtr<FUnrealGitWidgetNode> Selected = SelectedItems.Num() > 0 ? SelectedItems[0] : nullptr;
+
+	for (const TSharedPtr<FUnrealGitWidgetNode>& Node : HierarchyItems)
+	{
+		if (!Node.IsValid() || Node->Change == EUnrealGitWidgetChange::Unchanged)
+		{
+			continue;
+		}
+
+		if (Node == Selected)
+		{
+			SelectedIndex = TotalChanges;
+		}
+		++TotalChanges;
+	}
+
+	if (TotalChanges == 0)
+	{
+		return LOCTEXT("ChangeCounterNone", "No changes");
+	}
+	if (SelectedIndex == INDEX_NONE)
+	{
+		return FText::Format(LOCTEXT("ChangeCounterUnselected", "Change - of {0}"), FText::AsNumber(TotalChanges));
+	}
+
+	return FText::Format(LOCTEXT("ChangeCounterPosition", "Change {0} of {1}"),
+		FText::AsNumber(SelectedIndex + 1),
+		FText::AsNumber(TotalChanges));
 }
 
 TSharedPtr<FUnrealGitWidgetNode> SUnrealGitWidgetDiffView::FindHierarchyNode(const FString& Name) const
@@ -827,6 +872,7 @@ void SUnrealGitWidgetDiffView::OnHierarchySelectionChanged(TSharedPtr<FUnrealGit
 	if (LeftCanvas.IsValid()) LeftCanvas->Invalidate(EInvalidateWidget::Paint);
 	if (RightCanvas.IsValid()) RightCanvas->Invalidate(EInvalidateWidget::Paint);
 	if (DiffCanvas.IsValid()) DiffCanvas->Invalidate(EInvalidateWidget::Paint);
+	Invalidate(EInvalidateWidget::Paint);
 
 	if (bSyncingSelection)
 	{
