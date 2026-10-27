@@ -13,7 +13,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitDeleteWorkerTest, "UnrealGit.Workers.
 
 bool FUnrealGitDeleteWorkerTest::RunTest(const FString&)
 {
-
 	const FString RepoRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
 	// Single file.
@@ -77,7 +76,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitCopyWorkerTest, "UnrealGit.Workers.Co
 
 bool FUnrealGitCopyWorkerTest::RunTest(const FString&)
 {
-
 	const FString RepoRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
 	// Single file.
@@ -139,7 +137,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitResolveWorkerTest, "UnrealGit.Workers
 
 bool FUnrealGitResolveWorkerTest::RunTest(const FString&)
 {
-
 	const FString RepoRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
 	// Single file.

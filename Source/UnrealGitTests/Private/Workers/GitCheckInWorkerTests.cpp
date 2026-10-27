@@ -11,7 +11,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitCheckInWorkerTest, "UnrealGit.Workers
 
 bool FUnrealGitCheckInWorkerTest::RunTest(const FString&)
 {
-
 	TSharedRef<FMockGitProcessRunner, ESPMode::ThreadSafe> Runner = MakeShared<FMockGitProcessRunner, ESPMode::ThreadSafe>();
 
 	FMockGitProcessRunner::FExpectation AddExp;
@@ -45,7 +44,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitCheckInWorkerBatch60Test, "UnrealGit.
 
 bool FUnrealGitCheckInWorkerBatch60Test::RunTest(const FString&)
 {
-
 	TSharedRef<FMockGitProcessRunner, ESPMode::ThreadSafe> Runner = MakeShared<FMockGitProcessRunner, ESPMode::ThreadSafe>();
 
 	for (int32 i = 0; i < 4; ++i)
@@ -105,7 +103,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitCheckInWorkerBatch120Test, "UnrealGit
 
 bool FUnrealGitCheckInWorkerBatch120Test::RunTest(const FString&)
 {
-
 	TSharedRef<FMockGitProcessRunner, ESPMode::ThreadSafe> Runner = MakeShared<FMockGitProcessRunner, ESPMode::ThreadSafe>();
 
 	for (int32 i = 0; i < 6; ++i)

@@ -7,7 +7,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitStatusParserTest, "UnrealGit.Parsers.
 
 bool FUnrealGitStatusParserTest::RunTest(const FString&)
 {
-
 	TArray<uint8> Bytes;
 	auto AppendZ = [&Bytes](const FString& S)
 	{
@@ -51,7 +50,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitStatusParserUnmergedZTest, "UnrealGit
 
 bool FUnrealGitStatusParserUnmergedZTest::RunTest(const FString&)
 {
-
 	TArray<uint8> Bytes;
 	auto AppendZ = [&Bytes](const FString& S)
 	{
@@ -95,7 +93,6 @@ IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitStatusParserUnmergedZMalformedTest, "
 
 bool FUnrealGitStatusParserUnmergedZMalformedTest::RunTest(const FString&)
 {
-
 	TArray<uint8> EmptyBytes;
 	TMap<FString, FGitResolveInfo> EmptyMap;
 	FString EmptyError;
