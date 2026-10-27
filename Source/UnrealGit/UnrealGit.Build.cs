@@ -29,6 +29,9 @@ public class UnrealGit : ModuleRules
 				"Slate",
 				"SlateCore",
 				"UnrealEd",
+				"SourceControlWindows",
+				"AssetTools",
+				"ToolMenus",
 			}
 			);
 		

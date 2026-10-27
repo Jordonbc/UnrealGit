@@ -156,6 +156,8 @@ bool FUnrealGitSourceControlRevision::Get(FString& InOutFilename, EConcurrency::
 		UE_LOG(LogTemp, Warning, TEXT("Revision::Get (sync, game thread): bOk=%d Filename=%s Error=%s"), bOk ? 1 : 0, *Filename, *MatError);
 		if (bOk)
 		{
+			const FPackagePath TmpPath = FPackagePath::FromLocalPath(Filename);
+			UE_LOG(LogTemp, Warning, TEXT("  PackageName=%s IsTemp=%d FileExists=%d Size=%lld"), *TmpPath.GetPackageName(), FPackageName::IsTempPackage(TmpPath.GetPackageName()) ? 1 : 0, FPaths::FileExists(Filename) ? 1 : 0, (long long)IFileManager::Get().FileSize(*Filename));
 			FScopeLock Scope(&Lock);
 			CachedMaterializedFilename = Filename;
 			InOutFilename = Filename;

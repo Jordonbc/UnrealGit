@@ -4,6 +4,7 @@
 
 #include "Features/IModularFeatures.h"
 #include "UnrealGit/SourceControl/UnrealGitSourceControlProvider.h"
+#include "UnrealGit/UI/UnrealGitHistoryDiffExtension.h"
 
 DEFINE_LOG_CATEGORY(LogUnrealGit);
 
@@ -13,12 +14,14 @@ void FUnrealGitModule::StartupModule()
 {
 	Provider = MakeUnique<FUnrealGitSourceControlProvider>();
 	IModularFeatures::Get().RegisterModularFeature(FName("SourceControl"), Provider.Get());
+	FUnrealGitHistoryDiffExtension::Register();
 }
 
 void FUnrealGitModule::ShutdownModule()
 {
 	if (Provider)
 	{
+		FUnrealGitHistoryDiffExtension::Unregister();
 		IModularFeatures::Get().UnregisterModularFeature(FName("SourceControl"), Provider.Get());
 		Provider.Reset();
 	}
