@@ -8,12 +8,9 @@
 #include "ISourceControlRevision.h"
 #include "ISourceControlState.h"
 #include "ToolMenus.h"
-#include "ISourceControlRevision.h"
 #include "SourceControlWindows.h"
-#include "ISourceControlState.h"
 #include "Modules/ModuleManager.h"
 #include "Styling/AppStyle.h"
-#include "ToolMenus.h"
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffLauncher.h"
 
 #define LOCTEXT_NAMESPACE "UnrealGitWidgetDiffHistory"
