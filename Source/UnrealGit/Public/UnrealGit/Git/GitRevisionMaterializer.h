@@ -7,6 +7,7 @@
 class IGitProcessRunner;
 
 /**
+ * @class FGitRevisionMaterializer
  * Materializes Git revisions to temporary files for Unreal's diff and asset load pipeline.
  *
  * Responsibility:
@@ -47,6 +48,10 @@ public:
 	void Cleanup();
 
 private:
+	/**
+	 * @struct FKey
+	 * Composite key identifying a materialized revision and relative path.
+	 */
 	struct FKey final
 	{
 		FString CommitId;
