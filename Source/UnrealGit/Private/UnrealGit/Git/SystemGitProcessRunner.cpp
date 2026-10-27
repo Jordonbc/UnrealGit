@@ -92,7 +92,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 		const FString IndexLockPath = FPaths::Combine(Request.RepoRoot, TEXT(".git"), TEXT("index.lock"));
 		if (IFileManager::Get().FileExists(*IndexLockPath))
 		{
-			UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: Removing stale index.lock file"));
+			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UnrealGit: Removing stale index.lock file"));
 			IFileManager::Get().Delete(*IndexLockPath, false, true, true);
 		}
 	}
@@ -100,7 +100,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 	const FString Params = BuildCommandLine(FinalArguments);
 	uint32 ProcessId = 0;
 
-	UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: Running git: executable='%s', args='%s', workdir='%s'"),
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UnrealGit: Running git: executable='%s', args='%s', workdir='%s'"),
 		*GitExecutablePath, *Params, Request.WorkingDirectory.IsEmpty() ? TEXT("(null)") : *Request.WorkingDirectory);
 
 	FProcHandle Handle = FPlatformProcess::CreateProc(
@@ -120,7 +120,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 	{
 		Result.ExitCode = -1;
 		const FString Error = FString::Printf(TEXT("Failed to launch git process: %s %s (workdir: %s)"), *GitExecutablePath, *Params, Request.WorkingDirectory.IsEmpty() ? TEXT("(null)") : *Request.WorkingDirectory);
-		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: %s"), *Error);
+		UE_LOG(LogUnrealGit, Error, TEXT("UnrealGit: %s"), *Error);
 		FTCHARToUTF8 Utf8(*Error);
 		Result.StdErr.Append(reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
 		Result.Duration = FTimespan::FromSeconds(FPlatformTime::Seconds() - StartSeconds);
@@ -155,7 +155,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 
 		if (TimeoutSeconds > 0.0 && (FPlatformTime::Seconds() - StartSeconds) > TimeoutSeconds)
 		{
-			UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: Process timed out after %f seconds: %s %s"), TimeoutSeconds, *GitExecutablePath, *Params);
+			UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: Process timed out after %f seconds: %s %s"), TimeoutSeconds, *GitExecutablePath, *Params);
 			Result.bWasCanceled = true;
 			FPlatformProcess::TerminateProc(Handle, true);
 			break;
@@ -179,7 +179,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 
 	if (ExitCode == 128 && StdErr.Contains(TEXT("index.lock")) && !Request.RepoRoot.IsEmpty())
 	{
-		UE_LOG(LogSourceControl, Verbose, TEXT("UnrealGit: index.lock conflict detected, retrying after brief delay..."));
+		UE_LOG(LogUnrealGit, Verbose, TEXT("UnrealGit: index.lock conflict detected, retrying after brief delay..."));
 		FPlatformProcess::Sleep(0.1f);
 
 		IFileManager::Get().Delete(*FPaths::Combine(Request.RepoRoot, TEXT(".git"), TEXT("index.lock")), false, true, true);
@@ -193,7 +193,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 			StdOutWritePipe,
 			nullptr,
 			StdErrWritePipe);
-		
+
 		if (Handle.IsValid())
 		{
 			while (FPlatformProcess::IsProcRunning(Handle))
