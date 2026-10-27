@@ -24,6 +24,7 @@ public class UnrealGitWidgetDiff : ModuleRules
 				"AssetTools",
 				"ContentBrowser",
 				"InputCore",
+				"RenderCore",
 				"Slate",
 				"SlateCore",
 				"SourceControl",
