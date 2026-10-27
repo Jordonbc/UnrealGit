@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 
 /**
+ * @struct FGitEnvironmentInfo
  * Toolchain information for the system Git and Git LFS integration.
  *
  * Responsibility:
