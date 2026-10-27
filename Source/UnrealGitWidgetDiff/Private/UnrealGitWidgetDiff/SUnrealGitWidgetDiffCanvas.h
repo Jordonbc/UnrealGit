@@ -62,6 +62,7 @@ public:
 		SLATE_EVENT(FOnWidgetPicked, OnWidgetPicked)
 	SLATE_END_ARGS()
 
+	/** Builds the widget from the supplied arguments. @param InArgs Slate construction arguments. */
 	void Construct(const FArguments& InArgs);
 
 	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;

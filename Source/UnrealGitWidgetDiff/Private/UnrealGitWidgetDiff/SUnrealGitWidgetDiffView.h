@@ -22,6 +22,7 @@ public:
 	SUnrealGitWidgetDiffView();
 	virtual ~SUnrealGitWidgetDiffView() override;
 
+	/** Builds the widget from the supplied arguments. @param InArgs Slate construction arguments. */
 	void Construct(const FArguments& InArgs);
 	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
@@ -175,7 +176,7 @@ private:
 	 * @return Matching node, or null.
 	 */
 	TSharedPtr<FUnrealGitWidgetNode> FindHierarchyNode(const FString& Name) const;
-	/** True when the diff contains at least one changed widget to navigate to. */
+	/** True when the diff contains at least one changed widget to navigate to. @return True when changes exist. */
 	bool HasChanges() const;
 	/**
 	 * @struct FDiffEntry
