@@ -244,6 +244,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 								.FitToWindow_Lambda([this]() { return bFitToWindow; })
 								.TransformState(CanvasState)
 								.HighlightNodes(CanvasNodes)
+								.UseLeftGeometry(true)
 								.SelectedNode_Lambda([this]() { return SelectedNodeName; })
 								.OnWidgetPicked_Lambda([this](const FString& Name) { SelectWidgetByName(Name); }) ]
 						]
@@ -267,6 +268,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 								.FitToWindow_Lambda([this]() { return bFitToWindow; })
 								.TransformState(CanvasState)
 								.HighlightNodes(CanvasNodes)
+								.UseLeftGeometry(false)
 								.SelectedNode_Lambda([this]() { return SelectedNodeName; })
 								.OnWidgetPicked_Lambda([this](const FString& Name) { SelectWidgetByName(Name); }) ]
 						]
@@ -277,7 +279,11 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 						.BaseBrush(this, &SUnrealGitWidgetDiffView::GetDiffBrush)
 						.ShowOverlay(false)
 						.FitToWindow_Lambda([this]() { return bFitToWindow; })
-						.TransformState(CanvasState) ]
+						.TransformState(CanvasState)
+						.HighlightNodes(CanvasNodes)
+						.UseBothGeometries(true)
+						.SelectedNode_Lambda([this]() { return SelectedNodeName; })
+						.OnWidgetPicked_Lambda([this](const FString& Name) { SelectWidgetByName(Name); }) ]
 
 					+ SWidgetSwitcher::Slot()
 					[ SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
@@ -328,6 +334,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 	];
 
 	UpdateBrushes();
+	EnsureLivePreviews();
 	RebuildHierarchy();
 	if (Session.IsValid())
 	{
@@ -402,11 +409,11 @@ void SUnrealGitWidgetDiffView::EnsureLivePreviews()
 
 	if (LeftCanvas.IsValid())
 	{
-		LeftCanvas->SetPreviewContent(LeftPreviewWidget, LeftDesignSize);
+		LeftCanvas->SetPreviewContent(LeftPreviewWidget, LeftDesignSize, LeftLiveWidget.Get());
 	}
 	if (RightCanvas.IsValid())
 	{
-		RightCanvas->SetPreviewContent(RightPreviewWidget, RightDesignSize);
+		RightCanvas->SetPreviewContent(RightPreviewWidget, RightDesignSize, RightLiveWidget.Get());
 	}
 }
 
@@ -547,6 +554,9 @@ void SUnrealGitWidgetDiffView::RebuildHierarchy()
 	{
 		PropertyList->RequestListRefresh();
 	}
+	if (LeftCanvas.IsValid()) LeftCanvas->Invalidate(EInvalidateWidget::Paint);
+	if (RightCanvas.IsValid()) RightCanvas->Invalidate(EInvalidateWidget::Paint);
+	if (DiffCanvas.IsValid()) DiffCanvas->Invalidate(EInvalidateWidget::Paint);
 }
 
 void SUnrealGitWidgetDiffView::OnGetHierarchyChildren(TSharedPtr<FUnrealGitWidgetNode> Item, TArray<TSharedPtr<FUnrealGitWidgetNode>>& OutChildren) const
@@ -637,6 +647,7 @@ void SUnrealGitWidgetDiffView::OnHierarchySelectionChanged(TSharedPtr<FUnrealGit
 	SelectedNodeName = Item.IsValid() ? Item->Name : FString();
 	if (LeftCanvas.IsValid()) LeftCanvas->Invalidate(EInvalidateWidget::Paint);
 	if (RightCanvas.IsValid()) RightCanvas->Invalidate(EInvalidateWidget::Paint);
+	if (DiffCanvas.IsValid()) DiffCanvas->Invalidate(EInvalidateWidget::Paint);
 
 	if (Item.IsValid() && PropertyList.IsValid())
 	{

@@ -19,34 +19,32 @@
 
 namespace
 {
-	void CollectWidgetGeometry(UWidget* Widget, const float Scale, const FVector2D& Offset, TMap<FString, FBox2D>& OutRects)
+	void CollectWidgetGeometry(UWidget* Widget, TMap<FString, FBox2D>& OutRects)
 	{
 		if (!Widget)
 		{
 			return;
 		}
 
+		// Positions are paint-space geometry, which already includes the thumbnail
+		// renderer's fit scale, so they map 1:1 onto the rendered image pixels.
 		const FGeometry& Geometry = Widget->GetCachedGeometry();
-		const FVector2D LocalSize = Geometry.GetLocalSize();
 		const FVector2D AbsolutePosition = Geometry.GetAbsolutePosition();
-		const bool bValidSize = FMath::IsFinite(LocalSize.X) && FMath::IsFinite(LocalSize.Y) &&
-			LocalSize.X > 0.0f && LocalSize.Y > 0.0f && LocalSize.X < 16384.0f && LocalSize.Y < 16384.0f;
+		const FVector2D AbsoluteSize = Geometry.GetAbsoluteSize();
+		const bool bValidSize = FMath::IsFinite(AbsoluteSize.X) && FMath::IsFinite(AbsoluteSize.Y) &&
+			AbsoluteSize.X > 0.0f && AbsoluteSize.Y > 0.0f && AbsoluteSize.X < 100000.0f && AbsoluteSize.Y < 100000.0f;
 		const bool bValidPosition = FMath::IsFinite(AbsolutePosition.X) && FMath::IsFinite(AbsolutePosition.Y) &&
 			FMath::Abs(AbsolutePosition.X) < 100000.0f && FMath::Abs(AbsolutePosition.Y) < 100000.0f;
-		if (bValidSize && bValidPosition && FMath::IsFinite(Scale) && Scale > 0.0f && Scale < 100.0f)
+		if (bValidSize && bValidPosition)
 		{
-			const FVector2D Position = AbsolutePosition * Scale + Offset;
-			if (FMath::IsFinite(Position.X) && FMath::IsFinite(Position.Y))
-			{
-				OutRects.Add(Widget->GetName(), FBox2D(Position, Position + LocalSize * Scale));
-			}
+			OutRects.Add(Widget->GetName(), FBox2D(AbsolutePosition, AbsolutePosition + AbsoluteSize));
 		}
 
 		if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
 		{
 			for (int32 ChildIndex = 0; ChildIndex < Panel->GetChildrenCount(); ++ChildIndex)
 			{
-				CollectWidgetGeometry(Panel->GetChildAt(ChildIndex), Scale, Offset, OutRects);
+				CollectWidgetGeometry(Panel->GetChildAt(ChildIndex), OutRects);
 			}
 		}
 	}
@@ -118,34 +116,10 @@ bool FUnrealGitWidgetDiffRenderer::Render(UWidgetBlueprint* Blueprint, EThumbnai
 	}
 
 	// Collect each widget's preview rectangle so the viewer can draw designer-style
-	// change outlines without a pixel overlay.
-	const FVector2D ScaledSize = Properties->ScaledSize;
-	if (ScaledSize.X > 0.0f)
-	{
-		TSharedPtr<SWidget> SlateWidget = WidgetInstance->TakeWidget();
-		if (SlateWidget.IsValid())
-		{
-			TSharedRef<SVirtualWindow> Window = SNew(SVirtualWindow);
-			Window->SetContent(SlateWidget.ToSharedRef());
-			Window->Resize(ThumbnailSize);
-			Window->SlatePrepass(1.0f);
-
-			const FVector2D UnscaledSize = FWidgetBlueprintEditorUtils::GetWidgetPreviewUnScaledCustomSize(
-				Window->GetDesiredSize(),
-				WidgetInstance,
-				TOptional<FVector2D>(),
-				Mode);
-
-			if (UnscaledSize.X > 0.0f)
-			{
-				const float Scale = ScaledSize.X / UnscaledSize.X;
-				// The render-target path sizes the target to the fitted widget, so
-				// the image origin is (0,0); the returned Offset only applies when
-				// drawing into a larger canvas.
-				CollectWidgetGeometry(Blueprint->WidgetTree ? Blueprint->WidgetTree->RootWidget : nullptr, Scale, FVector2D::ZeroVector, OutWidgetRects);
-			}
-		}
-	}
+	// change outlines without a pixel overlay. The widget instance is the tree that
+	// was actually rendered above; the blueprint's template tree has no Slate
+	// widgets and therefore no cached geometry.
+	CollectWidgetGeometry(WidgetInstance->WidgetTree ? WidgetInstance->WidgetTree->RootWidget : nullptr, OutWidgetRects);
 
 	return true;
 }

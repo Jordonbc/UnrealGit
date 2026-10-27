@@ -251,22 +251,6 @@ void FUnrealGitWidgetDiffLauncher::Launch(const FString& AssetFileName, const FS
 				return;
 			}
 
-			for (FUnrealGitWidgetNode& Node : Hierarchy)
-			{
-				if (const FBox2D* LeftRect = LeftRects.Find(Node.Name))
-				{
-					Node.LeftPosition = LeftRect->Min;
-					Node.LeftSize = LeftRect->GetSize();
-					Node.bHasLeftGeometry = true;
-				}
-				if (const FBox2D* RightRect = RightRects.Find(Node.Name))
-				{
-					Node.RightPosition = RightRect->Min;
-					Node.RightSize = RightRect->GetSize();
-					Node.bHasRightGeometry = true;
-				}
-			}
-
 			const FIntPoint CanvasSize(
 				FMath::Max(LeftImage.SizeX, RightImage.SizeX),
 				FMath::Max(LeftImage.SizeY, RightImage.SizeY));
@@ -274,6 +258,31 @@ void FUnrealGitWidgetDiffLauncher::Launch(const FString& AssetFileName, const FS
 			{
 				Session->SetError(LOCTEXT("BadCanvas", "Rendered images have invalid dimensions."));
 				return;
+			}
+
+			// The diff canvas shows the images padded to the common canvas, so the
+			// captured geometry must be shifted by the same padding offset.
+			const FVector2D LeftPad(
+				(float)((CanvasSize.X - LeftImage.SizeX) / 2),
+				(float)((CanvasSize.Y - LeftImage.SizeY) / 2));
+			const FVector2D RightPad(
+				(float)((CanvasSize.X - RightImage.SizeX) / 2),
+				(float)((CanvasSize.Y - RightImage.SizeY) / 2));
+
+			for (FUnrealGitWidgetNode& Node : Hierarchy)
+			{
+				if (const FBox2D* LeftRect = LeftRects.Find(Node.Name))
+				{
+					Node.LeftPosition = LeftRect->Min + LeftPad;
+					Node.LeftSize = LeftRect->GetSize();
+					Node.bHasLeftGeometry = true;
+				}
+				if (const FBox2D* RightRect = RightRects.Find(Node.Name))
+				{
+					Node.RightPosition = RightRect->Min + RightPad;
+					Node.RightSize = RightRect->GetSize();
+					Node.bHasRightGeometry = true;
+				}
 			}
 
 			const FImage PaddedLeft = FUnrealGitWidgetDiffRenderer::PadToCanvas(LeftImage, CanvasSize);
