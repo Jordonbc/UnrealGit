@@ -15,28 +15,24 @@ public class UnrealGitWidgetDiff : ModuleRules
 				"CoreUObject",
 				"Engine",
 				"ImageCore",
-				"Slate",
-				"SlateCore",
-				"UMG",
 			}
 		);
 
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
-				"UnrealEd",
-				"UMGEditor",
-				"RenderCore",
-				"RHI",
-				"UnrealGit",
 				"AssetTools",
 				"ContentBrowser",
+				"InputCore",
+				"Slate",
+				"SlateCore",
 				"SourceControl",
 				"SourceControlWindows",
-				"InputCore",
 				"ToolMenus",
-				"DesktopPlatform",
-				"Projects",
+				"UMG",
+				"UMGEditor",
+				"UnrealEd",
+				"UnrealGit",
 			}
 		);
 	}

@@ -12,6 +12,8 @@ public class UnrealGit : ModuleRules
 			new string[]
 			{
 				"Core",
+				"DeveloperSettings",
+				"Engine",
 				"SourceControl",
 			}
 			);
@@ -20,20 +22,18 @@ public class UnrealGit : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
+				"AssetTools",
+				"ContentBrowser",
 				"CoreUObject",
-				"Engine",
-				"DeveloperSettings",
+				"DesktopPlatform",
 				"Json",
 				"JsonUtilities",
 				"Projects",
 				"Slate",
 				"SlateCore",
-				"UnrealEd",
 				"SourceControlWindows",
-				"AssetTools",
-				"ContentBrowser",
 				"ToolMenus",
-				"DesktopPlatform",
+				"UnrealEd",
 			}
 			);
 

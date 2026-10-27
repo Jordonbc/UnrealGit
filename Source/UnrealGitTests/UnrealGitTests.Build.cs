@@ -9,26 +9,18 @@ public class UnrealGitTests : ModuleRules
 	{
 		PCHUsage = PCHUsageMode.UseExplicitOrSharedPCHs;
 
-		PublicIncludePaths.Add(Path.Combine(ModuleDirectory, ".."));
-		PublicIncludePaths.Add(Path.Combine(ModuleDirectory, "..", "UnrealGit", "Private"));
-
-		PublicDependencyModuleNames.AddRange(
-			new string[]
-			{
-				"Core",
-				"UnrealGit",
-			}
-		);
+		PrivateIncludePaths.Add(Path.Combine(ModuleDirectory, ".."));
+		PrivateIncludePaths.Add(Path.Combine(ModuleDirectory, "..", "UnrealGit", "Private"));
 
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
+				"Core",
 				"CoreUObject",
 				"Engine",
-				"Json",
-				"JsonUtilities",
 				"SourceControl",
 				"UnrealEd",
+				"UnrealGit",
 			}
 		);
 	}
