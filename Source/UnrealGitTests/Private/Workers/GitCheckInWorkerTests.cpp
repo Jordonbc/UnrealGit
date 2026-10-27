@@ -17,12 +17,22 @@ bool FUnrealGitCheckInWorkerTest::RunTest(const FString&)
 	AddExp.Result.ExitCode = 0;
 	Runner->Enqueue(AddExp);
 
+	FMockGitProcessRunner::FExpectation StatusExp;
+	StatusExp.Result.ExitCode = 0;
+	{
+		FTCHARToUTF8 Utf8(TEXT(" M Content/Test.uasset"));
+		StatusExp.Result.StdOut.Append(reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
+		StatusExp.Result.StdOut.Add(0);
+	}
+	Runner->Enqueue(StatusExp);
+
 	FMockGitProcessRunner::FExpectation CommitExp;
 	CommitExp.Result.ExitCode = 0;
 	Runner->Enqueue(CommitExp);
 
 	FUnrealGitProviderSettings Settings;
 	Settings.bAutoPushAfterSubmit = false;
+	Settings.bEnableLfsLocks = false;
 
 	TSharedRef<FCheckIn, ESPMode::ThreadSafe> Op = ISourceControlOperation::Create<FCheckIn>();
 	Op->SetDescription(FText::FromString(TEXT("Test commit\nBody")));
@@ -34,9 +44,10 @@ bool FUnrealGitCheckInWorkerTest::RunTest(const FString&)
 	Worker.Execute(Runner, Settings, RepoRoot, false, Op, { FPaths::ConvertRelativePathToFull(RepoRoot / TEXT("Content/Test.uasset")) }, RepoRoot, Output);
 
 	TestTrue(TEXT("Worker success"), Output.bSuccess);
-	TestEqual(TEXT("Runner called twice"), Runner->GetRequests().Num(), 2);
+	TestEqual(TEXT("Runner called three times"), Runner->GetRequests().Num(), 3);
 	TestEqual(TEXT("First command is add"), Runner->GetRequests()[0].Arguments[0], FString(TEXT("add")));
-	TestEqual(TEXT("Second command is commit"), Runner->GetRequests()[1].Arguments[0], FString(TEXT("commit")));
+	TestEqual(TEXT("Second command is status"), Runner->GetRequests()[1].Arguments[0], FString(TEXT("status")));
+	TestEqual(TEXT("Third command is commit"), Runner->GetRequests()[2].Arguments[0], FString(TEXT("commit")));
 	return true;
 }
 
@@ -46,15 +57,34 @@ bool FUnrealGitCheckInWorkerBatch60Test::RunTest(const FString&)
 {
 	TSharedRef<FMockGitProcessRunner, ESPMode::ThreadSafe> Runner = MakeShared<FMockGitProcessRunner, ESPMode::ThreadSafe>();
 
-	for (int32 i = 0; i < 4; ++i)
+	FMockGitProcessRunner::FExpectation AddExp1;
+	AddExp1.Result.ExitCode = 0;
+	Runner->Enqueue(AddExp1);
+
+	FMockGitProcessRunner::FExpectation AddExp2;
+	AddExp2.Result.ExitCode = 0;
+	Runner->Enqueue(AddExp2);
+
+	FMockGitProcessRunner::FExpectation StatusExp;
+	StatusExp.Result.ExitCode = 0;
 	{
-		FMockGitProcessRunner::FExpectation Exp;
-		Exp.Result.ExitCode = 0;
-		Runner->Enqueue(Exp);
+		FTCHARToUTF8 Utf8(TEXT(" M Content/File0.uasset"));
+		StatusExp.Result.StdOut.Append(reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
+		StatusExp.Result.StdOut.Add(0);
 	}
+	Runner->Enqueue(StatusExp);
+
+	FMockGitProcessRunner::FExpectation CommitExp1;
+	CommitExp1.Result.ExitCode = 0;
+	Runner->Enqueue(CommitExp1);
+
+	FMockGitProcessRunner::FExpectation CommitExp2;
+	CommitExp2.Result.ExitCode = 0;
+	Runner->Enqueue(CommitExp2);
 
 	FUnrealGitProviderSettings Settings;
 	Settings.bAutoPushAfterSubmit = false;
+	Settings.bEnableLfsLocks = false;
 
 	TSharedRef<FCheckIn, ESPMode::ThreadSafe> Op = ISourceControlOperation::Create<FCheckIn>();
 	Op->SetDescription(FText::FromString(TEXT("Batch commit")));
@@ -72,7 +102,7 @@ bool FUnrealGitCheckInWorkerBatch60Test::RunTest(const FString&)
 	Worker.Execute(Runner, Settings, RepoRoot, false, Op, Files, RepoRoot, Output);
 
 	TestTrue(TEXT("Worker success"), Output.bSuccess);
-	TestEqual(TEXT("Total requests"), Runner->GetRequests().Num(), 4);
+	TestEqual(TEXT("Total requests"), Runner->GetRequests().Num(), 5);
 
 	int32 AddCount = 0;
 	int32 CommitCount = 0;
@@ -96,6 +126,7 @@ bool FUnrealGitCheckInWorkerBatch60Test::RunTest(const FString&)
 	TestEqual(TEXT("Add batches"), AddCount, 2);
 	TestEqual(TEXT("Commit invocations"), CommitCount, 2);
 	TestEqual(TEXT("Amend commits"), AmendCount, 1);
+	TestEqual(TEXT("Intervening command is status"), Runner->GetRequests()[2].Arguments[0], FString(TEXT("status")));
 	return true;
 }
 
@@ -105,15 +136,42 @@ bool FUnrealGitCheckInWorkerBatch120Test::RunTest(const FString&)
 {
 	TSharedRef<FMockGitProcessRunner, ESPMode::ThreadSafe> Runner = MakeShared<FMockGitProcessRunner, ESPMode::ThreadSafe>();
 
-	for (int32 i = 0; i < 6; ++i)
+	FMockGitProcessRunner::FExpectation AddExp1;
+	AddExp1.Result.ExitCode = 0;
+	Runner->Enqueue(AddExp1);
+
+	FMockGitProcessRunner::FExpectation AddExp2;
+	AddExp2.Result.ExitCode = 0;
+	Runner->Enqueue(AddExp2);
+
+	FMockGitProcessRunner::FExpectation AddExp3;
+	AddExp3.Result.ExitCode = 0;
+	Runner->Enqueue(AddExp3);
+
+	FMockGitProcessRunner::FExpectation StatusExp;
+	StatusExp.Result.ExitCode = 0;
 	{
-		FMockGitProcessRunner::FExpectation Exp;
-		Exp.Result.ExitCode = 0;
-		Runner->Enqueue(Exp);
+		FTCHARToUTF8 Utf8(TEXT(" M Content/File0.uasset"));
+		StatusExp.Result.StdOut.Append(reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
+		StatusExp.Result.StdOut.Add(0);
 	}
+	Runner->Enqueue(StatusExp);
+
+	FMockGitProcessRunner::FExpectation CommitExp1;
+	CommitExp1.Result.ExitCode = 0;
+	Runner->Enqueue(CommitExp1);
+
+	FMockGitProcessRunner::FExpectation CommitExp2;
+	CommitExp2.Result.ExitCode = 0;
+	Runner->Enqueue(CommitExp2);
+
+	FMockGitProcessRunner::FExpectation CommitExp3;
+	CommitExp3.Result.ExitCode = 0;
+	Runner->Enqueue(CommitExp3);
 
 	FUnrealGitProviderSettings Settings;
 	Settings.bAutoPushAfterSubmit = false;
+	Settings.bEnableLfsLocks = false;
 
 	TSharedRef<FCheckIn, ESPMode::ThreadSafe> Op = ISourceControlOperation::Create<FCheckIn>();
 	Op->SetDescription(FText::FromString(TEXT("Batch commit")));
@@ -131,7 +189,7 @@ bool FUnrealGitCheckInWorkerBatch120Test::RunTest(const FString&)
 	Worker.Execute(Runner, Settings, RepoRoot, false, Op, Files, RepoRoot, Output);
 
 	TestTrue(TEXT("Worker success"), Output.bSuccess);
-	TestEqual(TEXT("Total requests"), Runner->GetRequests().Num(), 6);
+	TestEqual(TEXT("Total requests"), Runner->GetRequests().Num(), 7);
 
 	int32 AddCount = 0;
 	int32 CommitCount = 0;
@@ -155,5 +213,6 @@ bool FUnrealGitCheckInWorkerBatch120Test::RunTest(const FString&)
 	TestEqual(TEXT("Add batches"), AddCount, 3);
 	TestEqual(TEXT("Commit invocations"), CommitCount, 3);
 	TestEqual(TEXT("Amend commits"), AmendCount, 2);
+	TestEqual(TEXT("Intervening command is status"), Runner->GetRequests()[3].Arguments[0], FString(TEXT("status")));
 	return true;
 }
