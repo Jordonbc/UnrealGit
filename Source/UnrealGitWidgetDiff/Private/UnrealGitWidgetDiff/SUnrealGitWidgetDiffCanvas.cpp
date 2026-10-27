@@ -266,7 +266,7 @@ int32 SUnrealGitWidgetDiffCanvas::OnPaint(
 		MaxLayer = SCompoundWidget::OnPaint(Args, AllottedGeometry, MyCullingRect, OutDrawElements, LayerId + 8, InWidgetStyle, bParentEnabled);
 		// Capture after the child hierarchy has painted so the cached geometry is
 		// this frame's arranged geometry, in the live preview's own coordinates.
-		CollectLiveGeometry(EffectiveZoom, LiveRects);
+		CollectLiveGeometry(AllottedGeometry, Position, EffectiveZoom, LiveRects);
 	}
 	else
 	{
@@ -286,6 +286,8 @@ int32 SUnrealGitWidgetDiffCanvas::OnPaint(
 }
 
 void SUnrealGitWidgetDiffCanvas::CollectLiveGeometry(
+	const FGeometry& AllottedGeometry,
+	const FVector2D& Position,
 	float EffectiveZoom,
 	TMap<FString, FBox2D>& OutRects) const
 {
@@ -300,16 +302,13 @@ void SUnrealGitWidgetDiffCanvas::CollectLiveGeometry(
 		return;
 	}
 
-	// The live preview root is forced to the design size, so its absolute size
-	// gives desktop-pixels-per-design-unit on each axis. Mapping through the root
-	// keeps outlines aligned with the preview at any zoom, pan, resize or DPI.
-	const FGeometry& RootGeometry = PreviewContent->GetTickSpaceGeometry();
-	const FVector2D RootAbsolutePosition = RootGeometry.GetAbsolutePosition();
-	const FVector2D RootAbsoluteSize = RootGeometry.GetAbsoluteSize();
-	const FVector2D PixelsPerDesignUnit(RootAbsoluteSize.X / DesignSize.X, RootAbsoluteSize.Y / DesignSize.Y);
-	if (!FMath::IsFinite(RootAbsolutePosition.X) || !FMath::IsFinite(RootAbsolutePosition.Y) ||
-		!FMath::IsFinite(PixelsPerDesignUnit.X) || !FMath::IsFinite(PixelsPerDesignUnit.Y) ||
-		PixelsPerDesignUnit.X <= 0.0f || PixelsPerDesignUnit.Y <= 0.0f)
+	// Map each widget's arranged geometry straight through the canvas' current
+	// geometry. Using the preview root's tick-space geometry mixed stale layout
+	// with this frame's widget geometry, which made outlines drift during pan,
+	// zoom and layout changes.
+	const FVector2D CanvasAbsolutePosition = AllottedGeometry.GetAbsolutePosition();
+	const float CanvasAbsoluteScale = AllottedGeometry.GetAccumulatedLayoutTransform().GetScale();
+	if (!IsFinitePoint(CanvasAbsolutePosition) || !FMath::IsFinite(CanvasAbsoluteScale) || CanvasAbsoluteScale <= 0.0f)
 	{
 		return;
 	}
@@ -336,8 +335,10 @@ void SUnrealGitWidgetDiffCanvas::CollectLiveGeometry(
 			continue;
 		}
 
-		const FVector2D DesignTopLeft = (AbsolutePosition - RootAbsolutePosition) / PixelsPerDesignUnit;
-		const FVector2D DesignWidgetSize = AbsoluteSize / PixelsPerDesignUnit;
+		const FVector2D WidgetLocalPosition = (AbsolutePosition - CanvasAbsolutePosition) / CanvasAbsoluteScale;
+		const FVector2D WidgetLocalSize = AbsoluteSize / CanvasAbsoluteScale;
+		const FVector2D DesignTopLeft = (WidgetLocalPosition - Position) / EffectiveZoom;
+		const FVector2D DesignWidgetSize = WidgetLocalSize / EffectiveZoom;
 		const FVector2D DesignBottomRight = DesignTopLeft + DesignWidgetSize;
 		if (!IsFinitePoint(DesignTopLeft) || !IsFinitePoint(DesignBottomRight))
 		{
