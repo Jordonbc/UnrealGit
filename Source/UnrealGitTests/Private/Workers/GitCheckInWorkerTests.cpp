@@ -34,7 +34,7 @@ bool FUnrealGitCheckInWorkerTest::RunTest(const FString&)
 	Worker.Execute(Runner, Settings, RepoRoot, false, Op, { FPaths::ConvertRelativePathToFull(RepoRoot / TEXT("Content/Test.uasset")) }, RepoRoot, Output);
 
 	TestTrue(TEXT("Worker success"), Output.bSuccess);
-	TestTrue(TEXT("Runner called twice"), Runner->GetRequests().Num() == 2);
+	TestEqual(TEXT("Runner called twice"), Runner->GetRequests().Num(), 2);
 	TestEqual(TEXT("First command is add"), Runner->GetRequests()[0].Arguments[0], FString(TEXT("add")));
 	TestEqual(TEXT("Second command is commit"), Runner->GetRequests()[1].Arguments[0], FString(TEXT("commit")));
 	return true;
