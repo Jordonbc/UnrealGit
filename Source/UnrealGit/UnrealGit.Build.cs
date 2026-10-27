@@ -1,4 +1,4 @@
-// Some copyright should be here...
+// Copyright (C) 2026 Jordon Brooks. All Rights Reserved.
 
 using UnrealBuildTool;
 
