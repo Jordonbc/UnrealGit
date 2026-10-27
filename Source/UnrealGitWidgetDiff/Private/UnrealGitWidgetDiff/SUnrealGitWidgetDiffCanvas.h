@@ -124,12 +124,10 @@ private:
 	void PaintGrid(const FGeometry& AllottedGeometry, const FVector2D& Position, float EffectiveZoom, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
 	/**
 	 * Captures each live widget's rectangle into design space.
-	 * @param AllottedGeometry Geometry of this canvas.
-	 * @param Position Top-left of the image in canvas space.
 	 * @param EffectiveZoom Effective zoom factor.
 	 * @param OutRects Map from widget name to design-space rectangle.
 	 */
-	void CollectLiveGeometry(const FGeometry& AllottedGeometry, const FVector2D& Position, float EffectiveZoom, TMap<FString, FBox2D>& OutRects) const;
+	void CollectLiveGeometry(float EffectiveZoom, TMap<FString, FBox2D>& OutRects) const;
 	/**
 	 * Paints rulers, design boundary, optional bitmap overlay and change overlays.
 	 * @param AllottedGeometry Geometry of this canvas.
