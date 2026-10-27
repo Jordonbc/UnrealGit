@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 
 /**
+ * @struct FGitProcessRequest
  * A Git process request executed via the system Git CLI.
  *
  * This is a value type intended to be constructed by workers and executed by an
@@ -33,6 +34,7 @@ struct FGitProcessRequest final
 };
 
 /**
+ * @struct FGitProcessResult
  * Result of a Git CLI process execution.
  *
  * StdOut/StdErr are captured as raw bytes to preserve NUL-delimited (-z) and
