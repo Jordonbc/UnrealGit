@@ -670,6 +670,24 @@ TSharedRef<SDockTab> SUnrealGitWidgetDiffView::SpawnDetailsTab(const FSpawnTabAr
 namespace UnrealGitWidgetDiffDetails
 {
 	/**
+	 * Finds a property on a class or any of its UWidget ancestors.
+	 * @param Class Class to search from.
+	 * @param PropertyName Property name.
+	 * @return Property, or null when not found.
+	 */
+	static const FProperty* FindPropertyInHierarchy(const UClass* Class, FName PropertyName)
+	{
+		for (const UClass* CurrentClass = Class; CurrentClass && CurrentClass->IsChildOf(UWidget::StaticClass()); CurrentClass = CurrentClass->GetSuperClass())
+		{
+			if (const FProperty* Property = CurrentClass->FindPropertyByName(PropertyName))
+			{
+				return Property;
+			}
+		}
+		return nullptr;
+	}
+
+	/**
 	 * @class FChangedPropertyCustomization
 	 * Wraps properties that differ between the two revisions in an orange border
 	 * inside the native read-only details views.
@@ -680,18 +698,20 @@ namespace UnrealGitWidgetDiffDetails
 		/**
 		 * @param InChangedRoots Top-level property names that changed.
 		 */
-		explicit FChangedPropertyCustomization(TSharedPtr<TSet<FName>> InChangedRoots)
+		explicit FChangedPropertyCustomization(TSharedPtr<TSet<FName>> InChangedRoots, UClass* InCustomizedClass)
 			: ChangedRoots(MoveTemp(InChangedRoots))
+			, CustomizedClass(InCustomizedClass)
 		{
 		}
 
 		/**
 		 * @param InChangedRoots Top-level property names that changed.
+		 * @param InCustomizedClass Class this customisation is registered for.
 		 * @return New customization instance.
 		 */
-		static TSharedRef<IDetailCustomization> MakeInstance(TSharedPtr<TSet<FName>> InChangedRoots)
+		static TSharedRef<IDetailCustomization> MakeInstance(TSharedPtr<TSet<FName>> InChangedRoots, UClass* InCustomizedClass)
 		{
-			return MakeShared<FChangedPropertyCustomization>(MoveTemp(InChangedRoots));
+			return MakeShared<FChangedPropertyCustomization>(MoveTemp(InChangedRoots), InCustomizedClass);
 		}
 
 		virtual void CustomizeDetails(IDetailLayoutBuilder& DetailBuilder) override
@@ -711,8 +731,8 @@ namespace UnrealGitWidgetDiffDetails
 
 			for (const FName& PropertyName : *ChangedRoots)
 			{
-				const FProperty* Property = Widget->GetClass()->FindPropertyByName(PropertyName);
-				if (!Property)
+				const FProperty* Property = FindPropertyInHierarchy(Widget->GetClass(), PropertyName);
+				if (!Property || Property->GetOwnerStruct() != CustomizedClass.Get())
 				{
 					continue;
 				}
@@ -753,6 +773,7 @@ namespace UnrealGitWidgetDiffDetails
 
 	private:
 		TSharedPtr<TSet<FName>> ChangedRoots;
+		TWeakObjectPtr<UClass> CustomizedClass;
 	};
 }
 
@@ -846,30 +867,51 @@ UWidget* SUnrealGitWidgetDiffView::ResolveWidgetForBlueprint(const UWidgetBluepr
 	return Blueprint->WidgetTree->FindWidget(FName(*Name));
 }
 
-void SUnrealGitWidgetDiffView::ApplyDetailsCustomization(const TSharedPtr<IDetailsView>& View, TWeakObjectPtr<UClass>& CustomizedClass, UClass* WidgetClass)
+void SUnrealGitWidgetDiffView::ApplyDetailsCustomization(const TSharedPtr<IDetailsView>& View, TArray<TWeakObjectPtr<UClass>>& CustomizedClasses, UClass* WidgetClass)
 {
 	if (!View.IsValid())
 	{
 		return;
 	}
 
-	if (CustomizedClass.IsValid())
+	for (const TWeakObjectPtr<UClass>& CustomizedClass : CustomizedClasses)
 	{
-		View->UnregisterInstancedCustomPropertyLayout(CustomizedClass.Get());
-		CustomizedClass.Reset();
+		if (CustomizedClass.IsValid())
+		{
+			View->UnregisterInstancedCustomPropertyLayout(CustomizedClass.Get());
+		}
 	}
+	CustomizedClasses.Reset();
 
-	if (!WidgetClass)
+	if (!WidgetClass || !DetailsChangedRoots.IsValid())
 	{
 		return;
 	}
 
-	TSharedPtr<TSet<FName>> Roots = DetailsChangedRoots;
-	View->RegisterInstancedCustomPropertyLayout(WidgetClass, FOnGetDetailCustomizationInstance::CreateLambda([Roots]()
+	TSet<UClass*> OwnerClasses;
+	for (const FName& RootProperty : *DetailsChangedRoots)
 	{
-		return UnrealGitWidgetDiffDetails::FChangedPropertyCustomization::MakeInstance(Roots);
-	}));
-	CustomizedClass = WidgetClass;
+		const FProperty* Property = UnrealGitWidgetDiffDetails::FindPropertyInHierarchy(WidgetClass, RootProperty);
+		if (!Property)
+		{
+			continue;
+		}
+
+		if (UClass* OwnerClass = Cast<UClass>(Property->GetOwnerStruct()))
+		{
+			OwnerClasses.Add(OwnerClass);
+		}
+	}
+
+	TSharedPtr<TSet<FName>> Roots = DetailsChangedRoots;
+	for (UClass* OwnerClass : OwnerClasses)
+	{
+		View->RegisterInstancedCustomPropertyLayout(OwnerClass, FOnGetDetailCustomizationInstance::CreateLambda([Roots, OwnerClass]()
+		{
+			return UnrealGitWidgetDiffDetails::FChangedPropertyCustomization::MakeInstance(Roots, OwnerClass);
+		}));
+		CustomizedClasses.Add(OwnerClass);
+	}
 }
 
 void SUnrealGitWidgetDiffView::RefreshDetailsViews(const FUnrealGitWidgetNode* Node)
@@ -904,8 +946,8 @@ void SUnrealGitWidgetDiffView::RefreshDetailsViews(const FUnrealGitWidgetNode* N
 	UWidget* LeftWidget = Images ? ResolveWidgetForBlueprint(Images->LeftBlueprint, WidgetName) : nullptr;
 	UWidget* RightWidget = Images ? ResolveWidgetForBlueprint(Images->RightBlueprint, WidgetName) : nullptr;
 
-	ApplyDetailsCustomization(LeftDetailsView, LeftDetailsCustomizedClass, LeftWidget ? LeftWidget->GetClass() : nullptr);
-	ApplyDetailsCustomization(RightDetailsView, RightDetailsCustomizedClass, RightWidget ? RightWidget->GetClass() : nullptr);
+	ApplyDetailsCustomization(LeftDetailsView, LeftDetailsCustomizedClasses, LeftWidget ? LeftWidget->GetClass() : nullptr);
+	ApplyDetailsCustomization(RightDetailsView, RightDetailsCustomizedClasses, RightWidget ? RightWidget->GetClass() : nullptr);
 
 	if (LeftDetailsView.IsValid())
 	{

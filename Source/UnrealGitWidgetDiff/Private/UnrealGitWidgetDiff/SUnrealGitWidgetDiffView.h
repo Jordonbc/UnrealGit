@@ -147,17 +147,17 @@ private:
 	/** Top-level property names that should be boxed in the details views. */
 	TSharedPtr<TSet<FName>> DetailsChangedRoots;
 	/** Widget classes currently customised on each details view. */
-	TWeakObjectPtr<UClass> LeftDetailsCustomizedClass;
-	TWeakObjectPtr<UClass> RightDetailsCustomizedClass;
+	TArray<TWeakObjectPtr<UClass>> LeftDetailsCustomizedClasses;
+	TArray<TWeakObjectPtr<UClass>> RightDetailsCustomizedClasses;
 	/** Creates the read-only details views. */
 	void CreateDetailsViews();
 	/**
 	 * Applies the changed-property highlighting customisation for a widget class.
 	 * @param View Details view to configure.
-	 * @param CustomizedClass Currently customised class for that view; updated in place.
+	 * @param CustomizedClasses Classes currently customised on that view; updated in place.
 	 * @param WidgetClass Class of the widget now shown, or null.
 	 */
-	void ApplyDetailsCustomization(const TSharedPtr<IDetailsView>& View, TWeakObjectPtr<UClass>& CustomizedClass, UClass* WidgetClass);
+	void ApplyDetailsCustomization(const TSharedPtr<IDetailsView>& View, TArray<TWeakObjectPtr<UClass>>& CustomizedClasses, UClass* WidgetClass);
 	/** @return Details panel showing both revisions side by side. */
 	TSharedRef<SWidget> BuildDetailsPanel();
 	/**
