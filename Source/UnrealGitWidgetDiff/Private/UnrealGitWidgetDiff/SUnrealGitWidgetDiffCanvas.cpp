@@ -390,7 +390,10 @@ void SUnrealGitWidgetDiffCanvas::PaintGrid(
 
 	for (int32 GridIndex = 0; ImageOffsetY < AllottedSize.Y; ImageOffsetY += GridCellSize, ++GridIndex)
 	{
-		if (ImageOffsetY < 0.0f) continue;
+		if (ImageOffsetY < 0.0f)
+		{
+			continue;
+		}
 		const bool bIsRuleLine = (GridIndex % RulePeriod) == 0;
 		const FLinearColor* Color = bIsRuleLine ? &RuleColor : &RegularColor;
 		if (FMath::IsNearlyEqual(LocalGridOrigin.Y, ImageOffsetY, 1.0f)) Color = &CenterColor;
@@ -404,7 +407,10 @@ void SUnrealGitWidgetDiffCanvas::PaintGrid(
 
 	for (int32 GridIndex = 0; ImageOffsetX < AllottedSize.X; ImageOffsetX += GridCellSize, ++GridIndex)
 	{
-		if (ImageOffsetX < 0.0f) continue;
+		if (ImageOffsetX < 0.0f)
+		{
+			continue;
+		}
 		const bool bIsRuleLine = (GridIndex % RulePeriod) == 0;
 		const FLinearColor* Color = bIsRuleLine ? &RuleColor : &RegularColor;
 		if (FMath::IsNearlyEqual(LocalGridOrigin.X, ImageOffsetX, 1.0f)) Color = &CenterColor;
@@ -456,7 +462,10 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 		const float StartX = Position.X - RulerStep * FMath::Max(FMath::CeilToInt(Position.X / RulerStep), 0);
 		for (float X = StartX; X < AllottedSize.X; X += RulerStep)
 		{
-			if (X < RulerSize) continue;
+			if (X < RulerSize)
+			{
+				continue;
+			}
 			TArray<FVector2D> Tick;
 			Tick.Add(FVector2D(X, 0.0f));
 			Tick.Add(FVector2D(X, 6.0f));
@@ -470,7 +479,10 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 		const float StartY = Position.Y - RulerStep * FMath::Max(FMath::CeilToInt(Position.Y / RulerStep), 0);
 		for (float Y = StartY; Y < AllottedSize.Y; Y += RulerStep)
 		{
-			if (Y < RulerSize) continue;
+			if (Y < RulerSize)
+			{
+				continue;
+			}
 			TArray<FVector2D> Tick;
 			Tick.Add(FVector2D(0.0f, Y));
 			Tick.Add(FVector2D(6.0f, Y));
