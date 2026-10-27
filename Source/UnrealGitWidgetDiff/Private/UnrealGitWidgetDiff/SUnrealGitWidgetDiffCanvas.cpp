@@ -12,27 +12,61 @@
 
 namespace
 {
+	bool IsFinitePoint(const FVector2D& Point)
+	{
+		return FMath::IsFinite(Point.X) && FMath::IsFinite(Point.Y);
+	}
+
 	void AddDashedEdge(TArray<FVector2D>& OutPoints, const FVector2D& Start, const FVector2D& End, const float Dash, const float Gap)
 	{
-		const FVector2D Delta = End - Start;
-		const float Length = Delta.Size();
-		if (Length <= KINDA_SMALL_NUMBER)
+		if (!IsFinitePoint(Start) || !IsFinitePoint(End))
 		{
 			return;
 		}
-		const FVector2D Dir = Delta / Length;
-		float Cursor = 0.0f;
-		while (Cursor < Length)
+
+		const FVector2D Delta = End - Start;
+		const float Length = Delta.Size();
+		if (!FMath::IsFinite(Length) || Length <= KINDA_SMALL_NUMBER)
 		{
-			const float SegmentEnd = FMath::Min(Cursor + Dash, Length);
-			OutPoints.Add(Start + Dir * Cursor);
+			return;
+		}
+
+		const float SafeDash = FMath::Max(1.0f, Dash);
+		const float SafeGap = FMath::Max(1.0f, Gap);
+		const float Step = SafeDash + SafeGap;
+		const int32 MaxSegments = 4096;
+		const int32 SegmentCount = FMath::Clamp(FMath::CeilToInt(Length / Step), 0, MaxSegments);
+
+		const FVector2D Dir = Delta / Length;
+		for (int32 Index = 0; Index < SegmentCount; ++Index)
+		{
+			const float SegmentStart = Index * Step;
+			const float SegmentEnd = FMath::Min(SegmentStart + SafeDash, Length);
+			if (SegmentEnd <= SegmentStart)
+			{
+				break;
+			}
+			OutPoints.Add(Start + Dir * SegmentStart);
 			OutPoints.Add(Start + Dir * SegmentEnd);
-			Cursor = SegmentEnd + Gap;
 		}
 	}
 
 	void AddDashedRect(TArray<FVector2D>& OutPoints, const FVector2D& Min, const FVector2D& Max)
 	{
+		if (!IsFinitePoint(Min) || !IsFinitePoint(Max))
+		{
+			return;
+		}
+
+		const FVector2D Size = Max - Min;
+		const float MaxDimension = 100000.0f;
+		if (!FMath::IsFinite(Size.X) || !FMath::IsFinite(Size.Y) ||
+			Size.X <= 0.0f || Size.Y <= 0.0f ||
+			Size.X > MaxDimension || Size.Y > MaxDimension)
+		{
+			return;
+		}
+
 		AddDashedEdge(OutPoints, Min, FVector2D(Max.X, Min.Y), 5.0f, 4.0f);
 		AddDashedEdge(OutPoints, FVector2D(Max.X, Min.Y), Max, 5.0f, 4.0f);
 		AddDashedEdge(OutPoints, Max, FVector2D(Min.X, Max.Y), 5.0f, 4.0f);
@@ -126,12 +160,28 @@ FUnrealGitWidgetDiffCanvasState& SUnrealGitWidgetDiffCanvas::GetState() const
 
 FVector2D SUnrealGitWidgetDiffCanvas::GetImageSize() const
 {
+	FVector2D Size = FVector2D(100.0f, 100.0f);
 	if (DesignSize.X > 0.0f && DesignSize.Y > 0.0f)
 	{
-		return DesignSize;
+		Size = DesignSize;
 	}
-	const FSlateBrush* Brush = BaseBrush.Get();
-	return (Brush && Brush->GetResourceObject()) ? Brush->ImageSize : FVector2D(100.0f, 100.0f);
+	else
+	{
+		const FSlateBrush* Brush = BaseBrush.Get();
+		if (Brush && Brush->GetResourceObject())
+		{
+			Size = Brush->ImageSize;
+		}
+	}
+
+	const float MaxDimension = 16384.0f;
+	if (!FMath::IsFinite(Size.X) || !FMath::IsFinite(Size.Y) ||
+		Size.X <= 0.0f || Size.Y <= 0.0f ||
+		Size.X > MaxDimension || Size.Y > MaxDimension)
+	{
+		return FVector2D(100.0f, 100.0f);
+	}
+	return Size;
 }
 
 FVector2D SUnrealGitWidgetDiffCanvas::ComputeDesiredSize(float /*LayoutScaleMultiplier*/) const
@@ -162,6 +212,11 @@ int32 SUnrealGitWidgetDiffCanvas::OnPaint(
 	const float EffectiveZoom = FitScale * State.Zoom;
 	const FVector2D DrawSize = ImageSize * EffectiveZoom;
 	const FVector2D Position = (AllottedSize - DrawSize) * 0.5f + State.Pan;
+
+	if (!FMath::IsFinite(EffectiveZoom) || EffectiveZoom <= 0.0f || !IsFinitePoint(Position) || !IsFinitePoint(DrawSize))
+	{
+		return LayerId;
+	}
 
 	PaintGrid(AllottedGeometry, Position, EffectiveZoom, OutDrawElements, LayerId);
 
@@ -312,7 +367,7 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 	}
 
 	// Design-area boundary.
-	if (WhiteBrush)
+	if (WhiteBrush && DrawSize.X > 0.0f && DrawSize.Y > 0.0f && DrawSize.X < 100000.0f && DrawSize.Y < 100000.0f)
 	{
 		TArray<FVector2D> Border;
 		Border.Add(Position);

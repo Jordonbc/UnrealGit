@@ -410,7 +410,11 @@ void SUnrealGitWidgetDiffView::EnsureLivePreviews()
 
 		OutWidget = TStrongObjectPtr<UUserWidget>(Widget);
 		OutSlate = SlateWidget;
-		OutSize = UnscaledSize;
+		OutSize = (FMath::IsFinite(UnscaledSize.X) && FMath::IsFinite(UnscaledSize.Y) &&
+			UnscaledSize.X > 0.0f && UnscaledSize.Y > 0.0f &&
+			UnscaledSize.X < 16384.0f && UnscaledSize.Y < 16384.0f)
+			? UnscaledSize
+			: FVector2D(1280.0f, 720.0f);
 	};
 
 	Build(Session->Images->LeftBlueprint, LeftLiveWidget, LeftPreviewWidget, LeftDesignSize);

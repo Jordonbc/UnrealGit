@@ -28,10 +28,18 @@ namespace
 
 		const FGeometry& Geometry = Widget->GetCachedGeometry();
 		const FVector2D LocalSize = Geometry.GetLocalSize();
-		if (LocalSize.X > 0.0f && LocalSize.Y > 0.0f)
+		const FVector2D AbsolutePosition = Geometry.GetAbsolutePosition();
+		const bool bValidSize = FMath::IsFinite(LocalSize.X) && FMath::IsFinite(LocalSize.Y) &&
+			LocalSize.X > 0.0f && LocalSize.Y > 0.0f && LocalSize.X < 16384.0f && LocalSize.Y < 16384.0f;
+		const bool bValidPosition = FMath::IsFinite(AbsolutePosition.X) && FMath::IsFinite(AbsolutePosition.Y) &&
+			FMath::Abs(AbsolutePosition.X) < 100000.0f && FMath::Abs(AbsolutePosition.Y) < 100000.0f;
+		if (bValidSize && bValidPosition && FMath::IsFinite(Scale) && Scale > 0.0f && Scale < 100.0f)
 		{
-			const FVector2D Position = Geometry.GetAbsolutePosition() * Scale + Offset;
-			OutRects.Add(Widget->GetName(), FBox2D(Position, Position + LocalSize * Scale));
+			const FVector2D Position = AbsolutePosition * Scale + Offset;
+			if (FMath::IsFinite(Position.X) && FMath::IsFinite(Position.Y))
+			{
+				OutRects.Add(Widget->GetName(), FBox2D(Position, Position + LocalSize * Scale));
+			}
 		}
 
 		if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
