@@ -2,19 +2,12 @@
 
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/SUnrealGitWidgetDiffView.h"
 
-#include "UnrealGitWidgetDiff/UnrealGitWidgetDiffSession.h"
-#include "UnrealGitWidgetDiff/UnrealGitWidgetDiffTypes.h"
-#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffTab.h"
-#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffLauncher.h"
-#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/SUnrealGitWidgetDiffCanvas.h"
-
 #include "Blueprint/UserWidget.h"
 #include "Editor.h"
 #include "Engine/Texture2D.h"
 #include "Styling/AppStyle.h"
 #include "WidgetBlueprint.h"
 #include "WidgetBlueprintEditorUtils.h"
-#include "Widgets/SVirtualWindow.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
@@ -27,8 +20,15 @@
 #include "Widgets/Layout/SSpacer.h"
 #include "Widgets/Layout/SWidgetSwitcher.h"
 #include "Widgets/SBoxPanel.h"
+#include "Widgets/SVirtualWindow.h"
 #include "Widgets/Text/STextBlock.h"
 #include "Widgets/Views/SListView.h"
+
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/SUnrealGitWidgetDiffCanvas.h"
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffLauncher.h"
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffTab.h"
+#include "UnrealGitWidgetDiff/UnrealGitWidgetDiffSession.h"
+#include "UnrealGitWidgetDiff/UnrealGitWidgetDiffTypes.h"
 
 #define LOCTEXT_NAMESPACE "UnrealGitWidgetDiffView"
 

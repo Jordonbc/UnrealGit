@@ -3,11 +3,11 @@
 #include "Misc/AutomationTest.h"
 #include "Misc/Paths.h"
 #include "SourceControlOperations.h"
-#include "UnrealGit/Settings/UnrealGitProviderSettings.h"
-#include "Mocks/FMockGitProcessRunner.h"
-#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitDeleteWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitCopyWorker.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitDeleteWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitResolveWorker.h"
+#include "UnrealGit/Settings/UnrealGitProviderSettings.h"
+#include "UnrealGitTests/Private/Mocks/FMockGitProcessRunner.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitDeleteWorkerTest, "UnrealGit.Workers.Delete", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
