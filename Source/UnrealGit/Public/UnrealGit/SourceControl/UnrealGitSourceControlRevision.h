@@ -10,6 +10,7 @@ class FGitRevisionMaterializer;
 class IGitProcessRunner;
 
 /**
+ * @class FUnrealGitSourceControlRevision
  * Source control revision implementation for Git commits.
  *
  * Responsibility:
@@ -47,10 +48,18 @@ public:
 	virtual bool GetAnnotated(FString& InOutFilename) const override;
 	virtual bool GetAnnotated(TArray<FAnnotationLine>& OutLines) const override;
 
-	/** Links this revision to the revision it was branched/copied from (history metadata). */
+	/**
+	 * Links this revision to the revision it was branched/copied from (history metadata).
+	 *
+	 * @param InBranchSource Revision this one was branched/copied from.
+	 */
 	void SetBranchSource(TSharedPtr<class ISourceControlRevision, ESPMode::ThreadSafe> InBranchSource);
 
 private:
+	/**
+	 * @struct FMaterializationTask
+	 * Tracks an in-flight materialization operation.
+	 */
 	struct FMaterializationTask final
 	{
 		TFuture<bool> Future;

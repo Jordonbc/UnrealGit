@@ -5,6 +5,7 @@
 #include "UnrealGit/SourceControl/Workers/UnrealGitSourceControlWorkers.h"
 
 /**
+ * @class FGitCheckInWorker
  * Worker for Unreal's CheckIn operation.
  *
  * Responsibility:

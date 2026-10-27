@@ -9,6 +9,10 @@
 
 class UTexture2D;
 
+/**
+ * @class UUnrealGitWidgetDiffImages
+ * Holds the rendered textures and live blueprints for a widget diff session.
+ */
 UCLASS(Transient)
 class UUnrealGitWidgetDiffImages : public UObject
 {
@@ -34,6 +38,10 @@ public:
 	TObjectPtr<class UWidgetBlueprint> RightBlueprint = nullptr;
 };
 
+/**
+ * @enum EUnrealGitWidgetDiffState
+ * Loading, ready, error, or empty state of a widget diff session.
+ */
 enum class EUnrealGitWidgetDiffState : uint8
 {
 	Loading,
@@ -43,6 +51,7 @@ enum class EUnrealGitWidgetDiffState : uint8
 };
 
 /**
+ * @class FUnrealGitWidgetDiffSession
  * Shared state for a single widget diff session. The tab UI binds to this.
  */
 class FUnrealGitWidgetDiffSession : public TSharedFromThis<FUnrealGitWidgetDiffSession, ESPMode::ThreadSafe>
@@ -59,6 +68,16 @@ public:
 
 	FSimpleMulticastDelegate OnUpdated;
 
+	/**
+	 * Stores the diff result and images and marks the session ready.
+	 * @param InResult Diff result to store.
+	 * @param InImages Rendered images to store.
+	 */
 	void SetReady(const FUnrealGitWidgetDiffResult& InResult, const TStrongObjectPtr<UUnrealGitWidgetDiffImages>& InImages);
+
+	/**
+	 * Stores an error message and marks the session in the error state.
+	 * @param InMessage Error message to store.
+	 */
 	void SetError(const FText& InMessage);
 };

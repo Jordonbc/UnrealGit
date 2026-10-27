@@ -4,6 +4,10 @@
 
 #include "Modules/ModuleInterface.h"
 
+/**
+ * @class IUnrealGitWidgetDiffModule
+ * Module interface for the UnrealGitWidgetDiff editor module.
+ */
 class IUnrealGitWidgetDiffModule : public IModuleInterface
 {
 public:

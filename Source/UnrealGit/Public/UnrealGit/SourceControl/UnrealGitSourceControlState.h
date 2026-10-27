@@ -7,6 +7,7 @@
 #include "UnrealGit/Git/GitModels.h"
 
 /**
+ * @class FUnrealGitSourceControlState
  * Source control state for a single file as reported by Git.
  *
  * Responsibility:
