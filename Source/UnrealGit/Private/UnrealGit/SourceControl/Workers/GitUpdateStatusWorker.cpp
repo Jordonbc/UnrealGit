@@ -3,6 +3,7 @@
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitUpdateStatusWorker.h"
 
 #include "ISourceControlOperation.h"
+#include "SourceControlOperations.h"
 #include "UnrealGit/Git/IGitProcessRunner.h"
 #include "UnrealGit/Git/Parsers/GitLfsLocksParser.h"
 #include "UnrealGit/Git/Parsers/GitStatusParser.h"
@@ -18,7 +19,7 @@ void FGitUpdateStatusWorker::Execute(
 	const FUnrealGitProviderSettings& Settings,
 	const FString& WorkingDirectoryHint,
 	bool bQueryLfsLocks,
-	const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe>& /*Operation*/,
+	const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe>& Operation,
 	const TArray<FString>& Files,
 	const FString& CurrentRepoRoot,
 	FUnrealGitWorkerOutput& OutOutput)
@@ -225,6 +226,27 @@ void FGitUpdateStatusWorker::Execute(
 	OutOutput.bSuccess = true;
 	OutOutput.StatusSnapshot = MoveTemp(Snapshot);
 	OutOutput.RepoRoot = RepoRoot;
+
+	const bool bUpdateHistory = (Operation->GetName() == "UpdateStatus")
+		&& static_cast<const FUpdateStatus*>(&Operation.Get())->ShouldUpdateHistory();
+
+	if (bUpdateHistory)
+	{
+		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: UpdateHistory requested, fetching file history for %d files"), Files.Num());
+		for (const FString& AbsolutePath : Files)
+		{
+			TArray<FGitFileRevision> Revisions;
+			FString HistoryParseError;
+			if (UnrealGit::Workers::FetchFileHistory(ProcessRunner, RepoRoot, AbsolutePath, Revisions, HistoryParseError))
+			{
+				OutOutput.FileHistoryByAbsoluteFile.Add(FPaths::ConvertRelativePathToFull(AbsolutePath), MoveTemp(Revisions));
+			}
+			else
+			{
+				UE_LOG(LogUnrealGit, Warning, TEXT("UpdateStatus: Failed to fetch history for '%s': %s"), *AbsolutePath, *HistoryParseError);
+			}
+		}
+	}
 
 	if (Settings.bEnableLfsLocks && bQueryLfsLocks)
 	{

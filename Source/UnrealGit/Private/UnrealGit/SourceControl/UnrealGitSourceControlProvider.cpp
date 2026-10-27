@@ -497,6 +497,16 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	const FString ExistingRepoRoot = RepoRoot;
 	const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe> Runner = ProcessRunner.ToSharedRef();
 
+	if (InConcurrency == EConcurrency::Synchronous)
+	{
+		FUnrealGitWorkerOutput Output;
+		Command->Worker->Execute(Runner, Command->ProviderSettings, WorkingDirHint, Command->bQueryLfsLocks, Command->Operation, Command->Files, ExistingRepoRoot, Output);
+		ReconcileWorkerOutput(Command->Operation, Command->Files, Command->Delegate, Output);
+		UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: Executed operation %s synchronously (files=%d, success=%d)"),
+			*OpName.ToString(), InFiles.Num(), Output.bSuccess ? 1 : 0);
+		return Output.bSuccess ? ECommandResult::Succeeded : ECommandResult::Failed;
+	}
+
 	Command->Future = Async(EAsyncExecution::ThreadPool, [Runner, WorkingDirHint, ExistingRepoRoot, Command]()
 	{
 		FUnrealGitWorkerOutput Output;
@@ -673,6 +683,102 @@ void FUnrealGitSourceControlProvider::ApplyLfsLocksToStates(const TOptional<FGit
 	}
 }
 
+void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
+	const FSourceControlOperationRef& Operation,
+	const TArray<FString>& Files,
+	const FSourceControlOperationComplete& Delegate,
+	const FUnrealGitWorkerOutput& Output)
+{
+	bool bAnyStateChanged = false;
+	const FString OperationName = Operation->GetName().ToString();
+
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("Reconcile: Processing operation '%s', bSuccess=%d, HasStatusSnapshot=%d, Files=%d"),
+		*OperationName, Output.bSuccess ? 1 : 0, Output.StatusSnapshot.IsSet() ? 1 : 0, Files.Num());
+
+	if (Output.RepoRoot.IsSet())
+	{
+		RepoRoot = Output.RepoRoot.GetValue();
+	}
+
+	if (Output.bSuccess && Output.StatusSnapshot.IsSet())
+	{
+		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("Reconcile: Calling UpdateStatesFromStatusSnapshot with %d files"), Output.StatusSnapshot.GetValue().Files.Num());
+		UpdateStatesFromStatusSnapshot(Output.StatusSnapshot.GetValue(), Files);
+		LastErrorText = FText::GetEmpty();
+		bAnyStateChanged = true;
+	}
+	else if (!Output.bSuccess)
+	{
+		LastErrorText = Output.ErrorText;
+		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Operation %s failed: %s"), *OperationName, *LastErrorText.ToString());
+
+		const FString ErrorStr = LastErrorText.ToString();
+		if (ErrorStr.Contains(TEXT("index file smaller than expected")) || ErrorStr.Contains(TEXT("index file corrupt")))
+		{
+			UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: Detected corrupted index, attempting auto-recovery..."));
+			if (UnrealGit::Workers::TryFixCorruptedIndex(ProcessRunner, RepoRoot))
+			{
+				LastErrorText = FText::FromString(TEXT("Corrupted index was rebuilt. Please retry the operation."));
+				UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Successfully recovered from corrupted index. User should retry the operation."));
+			}
+		}
+	}
+
+	if (Output.bSuccess && Output.bHasLfsLocks)
+	{
+		CachedLfsLocks = Output.LfsLocks;
+		bHasCachedLfsLocks = true;
+		bAnyStateChanged = true;
+	}
+
+	if (Output.bSuccess && Output.StatusSnapshot.IsSet() && bHasCachedLfsLocks)
+	{
+		ApplyLfsLocksToStates(Output.StatusSnapshot, CachedLfsLocks);
+		bAnyStateChanged = true;
+	}
+
+	if (Output.bSuccess && Output.FileHistoryByAbsoluteFile.Num() > 0 && RevisionMaterializer.IsValid())
+	{
+		for (const TPair<FString, TArray<FGitFileRevision>>& Pair : Output.FileHistoryByAbsoluteFile)
+		{
+			const FString Abs = Pair.Key;
+
+			TArray<TSharedRef<ISourceControlRevision, ESPMode::ThreadSafe>> Revisions;
+			Revisions.Reserve(Pair.Value.Num());
+			for (const FGitFileRevision& FileRev : Pair.Value)
+			{
+				Revisions.Add(MakeShared<FUnrealGitSourceControlRevision, ESPMode::ThreadSafe>(
+					Abs,
+					FileRev.RepoRelativePathAtRevision,
+					FileRev.Revision,
+					RepoRoot,
+					ProcessRunner.ToSharedRef(),
+					RevisionMaterializer.ToSharedRef()));
+			}
+
+			const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
+			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetHistory(Revisions);
+			bAnyStateChanged = true;
+		}
+	}
+
+	if (Delegate.IsBound())
+	{
+		Delegate.ExecuteIfBound(Operation, Output.bSuccess ? ECommandResult::Succeeded : ECommandResult::Failed);
+	}
+
+	if (Output.bSuccess && Output.bShouldUpdateStatus)
+	{
+		const FSourceControlOperationRef UpdateOp = ISourceControlOperation::Create<FUpdateStatus>();
+		Execute(UpdateOp, nullptr, Output.FilesToUpdateStatus, EConcurrency::Asynchronous, FSourceControlOperationComplete());
+	}
+
+	if (bAnyStateChanged)
+	{
+		SourceControlStateChanged.Broadcast();
+	}
+}
+
 void FUnrealGitSourceControlProvider::Tick()
 {
 	if (EnvironmentFuture.IsValid() && EnvironmentFuture.IsReady())
@@ -709,94 +815,7 @@ void FUnrealGitSourceControlProvider::Tick()
 	for (const TSharedRef<FCommand, ESPMode::ThreadSafe>& Command : Completed)
 	{
 		const FUnrealGitWorkerOutput Output = Command->Future.Get();
-		bool bAnyStateChanged = false;
-		const FString OperationName = Command->Operation->GetName().ToString();
-
-		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("Tick: Processing completed operation '%s', bSuccess=%d, HasStatusSnapshot=%d, Files=%d"), 
-			*OperationName, Output.bSuccess ? 1 : 0, Output.StatusSnapshot.IsSet() ? 1 : 0, Command->Files.Num());
-
-		if (Output.RepoRoot.IsSet())
-		{
-			RepoRoot = Output.RepoRoot.GetValue();
-		}
-
-		if (Output.bSuccess && Output.StatusSnapshot.IsSet())
-		{
-			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("Tick: Calling UpdateStatesFromStatusSnapshot with %d files"), Output.StatusSnapshot.GetValue().Files.Num());
-			UpdateStatesFromStatusSnapshot(Output.StatusSnapshot.GetValue(), Command->Files);
-			LastErrorText = FText::GetEmpty();
-			bAnyStateChanged = true;
-		}
-		else if (!Output.bSuccess)
-		{
-			LastErrorText = Output.ErrorText;
-			UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Operation %s failed: %s"), *OperationName, *LastErrorText.ToString());
-
-			const FString ErrorStr = LastErrorText.ToString();
-			if (ErrorStr.Contains(TEXT("index file smaller than expected")) || ErrorStr.Contains(TEXT("index file corrupt")))
-			{
-				UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: Detected corrupted index, attempting auto-recovery..."));
-				if (UnrealGit::Workers::TryFixCorruptedIndex(ProcessRunner, RepoRoot))
-				{
-					LastErrorText = FText::FromString(TEXT("Corrupted index was rebuilt. Please retry the operation."));
-					UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Successfully recovered from corrupted index. User should retry the operation."));
-				}
-			}
-		}
-
-		if (Output.bSuccess && Output.bHasLfsLocks)
-		{
-			CachedLfsLocks = Output.LfsLocks;
-			bHasCachedLfsLocks = true;
-			bAnyStateChanged = true;
-		}
-
-		if (Output.bSuccess && Output.StatusSnapshot.IsSet() && bHasCachedLfsLocks)
-		{
-			ApplyLfsLocksToStates(Output.StatusSnapshot, CachedLfsLocks);
-			bAnyStateChanged = true;
-		}
-
-		if (Output.bSuccess && Output.FileHistoryByAbsoluteFile.Num() > 0 && RevisionMaterializer.IsValid())
-		{
-			for (const TPair<FString, TArray<FGitFileRevision>>& Pair : Output.FileHistoryByAbsoluteFile)
-			{
-				const FString Abs = Pair.Key;
-
-				TArray<TSharedRef<ISourceControlRevision, ESPMode::ThreadSafe>> Revisions;
-				Revisions.Reserve(Pair.Value.Num());
-				for (const FGitFileRevision& FileRev : Pair.Value)
-				{
-					Revisions.Add(MakeShared<FUnrealGitSourceControlRevision, ESPMode::ThreadSafe>(
-						Abs,
-						FileRev.RepoRelativePathAtRevision,
-						FileRev.Revision,
-						RepoRoot,
-						ProcessRunner.ToSharedRef(),
-						RevisionMaterializer.ToSharedRef()));
-				}
-
-				const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
-				StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetHistory(Revisions);
-				bAnyStateChanged = true;
-			}
-		}
-
-		if (Command->Delegate.IsBound())
-		{
-			Command->Delegate.ExecuteIfBound(Command->Operation, Output.bSuccess ? ECommandResult::Succeeded : ECommandResult::Failed);
-		}
-
-		if (Output.bSuccess && Output.bShouldUpdateStatus)
-		{
-			const FSourceControlOperationRef UpdateOp = ISourceControlOperation::Create<FUpdateStatus>();
-			Execute(UpdateOp, nullptr, Output.FilesToUpdateStatus, EConcurrency::Asynchronous, FSourceControlOperationComplete());
-		}
-
-		if (bAnyStateChanged)
-		{
-			SourceControlStateChanged.Broadcast();
-		}
+		ReconcileWorkerOutput(Command->Operation, Command->Files, Command->Delegate, Output);
 	}
 }
 

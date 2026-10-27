@@ -9,6 +9,7 @@
 #include "Logging/LogMacros.h"
 #include "UnrealGit/Git/IGitProcessRunner.h"
 #include "UnrealGit/Git/Parsers/GitRevParseParser.h"
+#include "UnrealGit/Git/Parsers/GitFileHistoryParser.h"
 
 namespace UnrealGit::Workers
 {
@@ -179,5 +180,53 @@ namespace UnrealGit::Workers
 
 		UE_LOG(LogUnrealGit, Error, TEXT("Failed to rebuild git index: %s"), *BytesToTextUtf8Lossy(Result.StdErr));
 		return false;
+	}
+
+	inline bool FetchFileHistory(
+		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
+		const FString& RepoRoot,
+		const FString& AbsolutePath,
+		TArray<FGitFileRevision>& OutRevisions,
+		FString& OutError)
+	{
+		OutRevisions.Reset();
+		OutError.Reset();
+
+		FString Relative;
+		if (!TryMakeRepoRelativePath(RepoRoot, AbsolutePath, Relative))
+		{
+			OutError = TEXT("File is outside the Git repository root.");
+			return false;
+		}
+
+		FGitProcessRequest LogRequest;
+		LogRequest.WorkingDirectory = FString();
+		LogRequest.RepoRoot = RepoRoot;
+		LogRequest.Arguments =
+		{
+			TEXT("--no-pager"),
+			TEXT("log"),
+			TEXT("--follow"),
+			TEXT("--date=iso-strict"),
+			TEXT("--name-status"),
+			TEXT("-z"),
+			TEXT("--pretty=format:%x1e%H%x1f%an%x1f%ae%x1f%ad%x1f%s"),
+			TEXT("--"),
+			Relative,
+		};
+
+		const FGitProcessResult LogResult = ProcessRunner->Run(LogRequest);
+		if (LogResult.ExitCode != 0)
+		{
+			OutError = BytesToTextUtf8Lossy(LogResult.StdErr);
+			return false;
+		}
+
+		if (!FGitFileHistoryParser::Parse(LogResult.StdOut, Relative, OutRevisions, OutError))
+		{
+			return false;
+		}
+
+		return true;
 	}
 }

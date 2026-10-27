@@ -33,44 +33,12 @@ void FGitGetHistoryWorker::Execute(
 
 	for (const FString& AbsolutePath : Files)
 	{
-		FString Relative;
-		if (!UnrealGit::Workers::TryMakeRepoRelativePath(RepoRoot, AbsolutePath, Relative))
-		{
-			OutOutput.bSuccess = false;
-			OutOutput.ErrorText = FText::FromString(TEXT("File is outside the Git repository root."));
-			return;
-		}
-
-		FGitProcessRequest LogRequest;
-		LogRequest.WorkingDirectory = FString();
-		LogRequest.RepoRoot = RepoRoot;
-		LogRequest.Arguments =
-		{
-			TEXT("--no-pager"),
-			TEXT("log"),
-			TEXT("--follow"),
-			TEXT("--date=iso-strict"),
-			TEXT("--name-status"),
-			TEXT("-z"),
-			TEXT("--pretty=format:%x1e%H%x1f%an%x1f%ae%x1f%ad%x1f%s"),
-			TEXT("--"),
-			Relative,
-		};
-
-		const FGitProcessResult LogResult = ProcessRunner->Run(LogRequest);
-		if (LogResult.ExitCode != 0)
-		{
-			OutOutput.bSuccess = false;
-			OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(LogResult.StdErr));
-			return;
-		}
-
 		TArray<FGitFileRevision> Revisions;
 		FString ParseError;
-		if (!FGitFileHistoryParser::Parse(LogResult.StdOut, Relative, Revisions, ParseError))
+		if (!UnrealGit::Workers::FetchFileHistory(ProcessRunner, RepoRoot, AbsolutePath, Revisions, ParseError))
 		{
 			OutOutput.bSuccess = false;
-			OutOutput.ErrorText = FText::FromString(ParseError);
+			OutOutput.ErrorText = FText::FromString(ParseError.IsEmpty() ? TEXT("File is outside the Git repository root.") : ParseError);
 			return;
 		}
 
