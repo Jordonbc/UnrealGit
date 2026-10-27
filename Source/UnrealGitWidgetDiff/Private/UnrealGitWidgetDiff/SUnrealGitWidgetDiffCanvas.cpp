@@ -388,7 +388,7 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 			Overlay, ESlateDrawEffect::None, FLinearColor(1.0f, 1.0f, 1.0f, 0.85f));
 	}
 
-	if (!HighlightNodes)
+	if (!HighlightNodes.IsValid())
 	{
 		return;
 	}
@@ -533,7 +533,7 @@ FReply SUnrealGitWidgetDiffCanvas::OnMouseButtonUp(const FGeometry& MyGeometry, 
 		bPanning = false;
 		bMouseDown = false;
 
-		if (bWasClick && HighlightNodes && OnWidgetPicked.IsBound())
+		if (bWasClick && HighlightNodes.IsValid() && OnWidgetPicked.IsBound())
 		{
 			const FVector2D LocalCursor = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
 			const FVector2D AllottedSize = MyGeometry.GetLocalSize();

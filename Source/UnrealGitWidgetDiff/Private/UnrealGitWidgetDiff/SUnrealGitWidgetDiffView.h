@@ -44,7 +44,7 @@ private:
 	TSharedPtr<class SUnrealGitWidgetDiffCanvas> RightCanvas;
 	TSharedPtr<class SUnrealGitWidgetDiffCanvas> DiffCanvas;
 	TSharedPtr<struct FUnrealGitWidgetDiffCanvasState> CanvasState;
-	TArray<FUnrealGitWidgetNode> CanvasNodes;
+	TSharedPtr<TArray<FUnrealGitWidgetNode>> CanvasNodes;
 	FString SelectedNodeName;
 
 	TStrongObjectPtr<class UUserWidget> LeftLiveWidget;

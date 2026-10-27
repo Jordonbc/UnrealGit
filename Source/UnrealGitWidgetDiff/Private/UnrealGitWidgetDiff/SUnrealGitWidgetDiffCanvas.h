@@ -23,13 +23,17 @@ class SUnrealGitWidgetDiffCanvas : public SCompoundWidget
 public:
 	DECLARE_DELEGATE_OneParam(FOnWidgetPicked, const FString&);
 
-	SLATE_BEGIN_ARGS(SUnrealGitWidgetDiffCanvas) {}
+	SLATE_BEGIN_ARGS(SUnrealGitWidgetDiffCanvas)
+		: _HighlightNodes(nullptr)
+		, _UseLeftGeometry(true)
+		, _DesignSize(FVector2D::ZeroVector)
+	{}
 		SLATE_ATTRIBUTE(const FSlateBrush*, BaseBrush)
 		SLATE_ATTRIBUTE(const FSlateBrush*, OverlayBrush)
 		SLATE_ATTRIBUTE(bool, ShowOverlay)
 		SLATE_ATTRIBUTE(bool, FitToWindow)
 		SLATE_ARGUMENT(TSharedPtr<FUnrealGitWidgetDiffCanvasState>, TransformState)
-		SLATE_ARGUMENT(TArray<FUnrealGitWidgetNode>*, HighlightNodes)
+		SLATE_ARGUMENT(TSharedPtr<TArray<FUnrealGitWidgetNode>>, HighlightNodes)
 		SLATE_ARGUMENT(bool, UseLeftGeometry)
 		SLATE_ATTRIBUTE(FString, SelectedNode)
 		SLATE_ARGUMENT(TSharedPtr<SWidget>, PreviewContent)
@@ -66,7 +70,7 @@ private:
 	TSharedPtr<FUnrealGitWidgetDiffCanvasState> TransformState;
 	mutable TSharedPtr<FUnrealGitWidgetDiffCanvasState> LocalState;
 
-	TArray<FUnrealGitWidgetNode>* HighlightNodes = nullptr;
+	TSharedPtr<TArray<FUnrealGitWidgetNode>> HighlightNodes;
 	bool bUseLeftGeometry = true;
 	TAttribute<FString> SelectedNode;
 

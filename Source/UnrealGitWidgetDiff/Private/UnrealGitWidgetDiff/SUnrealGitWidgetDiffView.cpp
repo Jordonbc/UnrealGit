@@ -46,6 +46,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 {
 	Session = InArgs._Session;
 	CanvasState = MakeShared<FUnrealGitWidgetDiffCanvasState>();
+	CanvasNodes = MakeShared<TArray<FUnrealGitWidgetNode>>();
 
 	LeftBrush.DrawAs = ESlateBrushDrawType::Image;
 	RightBrush.DrawAs = ESlateBrushDrawType::Image;
@@ -254,7 +255,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 								.ShowOverlay_Lambda([this]() { return bShowPixelOverlay; })
 								.FitToWindow_Lambda([this]() { return bFitToWindow; })
 								.TransformState(CanvasState)
-								.HighlightNodes(&CanvasNodes)
+								.HighlightNodes(CanvasNodes)
 								.SelectedNode_Lambda([this]() { return SelectedNodeName; })
 								.OnWidgetPicked_Lambda([this](const FString& Name) { SelectWidgetByName(Name); }) ]
 						]
@@ -277,7 +278,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 								.ShowOverlay_Lambda([this]() { return bShowPixelOverlay; })
 								.FitToWindow_Lambda([this]() { return bFitToWindow; })
 								.TransformState(CanvasState)
-								.HighlightNodes(&CanvasNodes)
+								.HighlightNodes(CanvasNodes)
 								.SelectedNode_Lambda([this]() { return SelectedNodeName; })
 								.OnWidgetPicked_Lambda([this](const FString& Name) { SelectWidgetByName(Name); }) ]
 						]
@@ -507,12 +508,16 @@ void SUnrealGitWidgetDiffView::RebuildHierarchy()
 		return;
 	}
 
-	CanvasNodes = Session->Result.Hierarchy;
+	if (!CanvasNodes.IsValid())
+	{
+		CanvasNodes = MakeShared<TArray<FUnrealGitWidgetNode>>();
+	}
+	*CanvasNodes = Session->Result.Hierarchy;
 
 	int32 AddedCount = 0;
 	int32 RemovedCount = 0;
 	int32 ModifiedCount = 0;
-	for (const FUnrealGitWidgetNode& Node : CanvasNodes)
+	for (const FUnrealGitWidgetNode& Node : *CanvasNodes)
 	{
 		switch (Node.Change)
 		{
