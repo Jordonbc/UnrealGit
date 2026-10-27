@@ -74,7 +74,7 @@ static void PopulateMenu(UToolMenu* InMenu)
 
 void FUnrealGitWidgetDiffAssetContextMenuExtension::Register()
 {
-	UToolMenus* ToolMenus = UToolMenus::Get();
+	UToolMenus* ToolMenus = UToolMenus::TryGet();
 	if (!ToolMenus)
 	{
 		return;
@@ -87,7 +87,7 @@ void FUnrealGitWidgetDiffAssetContextMenuExtension::Register()
 
 void FUnrealGitWidgetDiffAssetContextMenuExtension::Unregister()
 {
-	UToolMenus* ToolMenus = UToolMenus::Get();
+	UToolMenus* ToolMenus = UToolMenus::TryGet();
 	if (!ToolMenus)
 	{
 		return;
