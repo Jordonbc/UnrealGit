@@ -6,6 +6,7 @@
 #include "ImageCore.h"
 
 /**
+ * @struct FUnrealGitWidgetDiffSide
  * One side of a widget diff (either an older revision or the working copy).
  */
 struct FUnrealGitWidgetDiffSide
@@ -24,7 +25,10 @@ struct FUnrealGitWidgetDiffSide
 	FText Error;
 };
 
-/** Change state of a widget node between the two revisions. */
+/**
+ * @enum EUnrealGitWidgetChange
+ * Change state of a widget node between the two revisions.
+ */
 enum class EUnrealGitWidgetChange : uint8
 {
 	Unchanged,
@@ -33,7 +37,10 @@ enum class EUnrealGitWidgetChange : uint8
 	Modified,
 };
 
-/** One row in the read-only widget hierarchy tree. */
+/**
+ * @struct FUnrealGitWidgetNode
+ * One row in the read-only widget hierarchy tree.
+ */
 struct FUnrealGitWidgetNode
 {
 	FString Name;
@@ -62,6 +69,7 @@ struct FUnrealGitWidgetNode
 };
 
 /**
+ * @struct FUnrealGitWidgetDiffResult
  * Result of comparing two widget blueprint revisions.
  */
 struct FUnrealGitWidgetDiffResult
