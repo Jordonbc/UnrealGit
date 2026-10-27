@@ -11,6 +11,7 @@
 #include "Styling/AppStyle.h"
 #include "WidgetBlueprint.h"
 #include "WidgetBlueprintEditorUtils.h"
+#include "Widgets/Docking/SDockTab.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
@@ -44,6 +45,15 @@ SUnrealGitWidgetDiffView::SUnrealGitWidgetDiffView()
 
 SUnrealGitWidgetDiffView::~SUnrealGitWidgetDiffView()
 {
+	if (DockManager.IsValid())
+	{
+		DockManager->UnregisterTabSpawner(TEXT("UnrealGitWidgetDiff.Hierarchy"));
+		DockManager->UnregisterTabSpawner(TEXT("UnrealGitWidgetDiff.Viewer"));
+		DockManager->UnregisterTabSpawner(TEXT("UnrealGitWidgetDiff.Changes"));
+		DockManager->UnregisterTabSpawner(TEXT("UnrealGitWidgetDiff.Properties"));
+		DockManager.Reset();
+	}
+
 	if (Session.IsValid())
 	{
 		Session->OnUpdated.Remove(OnUpdatedHandle);
@@ -73,12 +83,23 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 
 	InspectorEmptyMessage = LOCTEXT("InspectorNoSelection", "Select a widget to inspect its property changes.");
 
+	if (InArgs._OwnerTab.IsValid())
+	{
+		DockManager = FGlobalTabmanager::Get()->NewTabManager(InArgs._OwnerTab.Pin().ToSharedRef());
+		RegisterDockSpawners();
+	}
+
 	ChildSlot
 	[
 		SNew(SBorder)
 		.BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
 		[
 		SNew(SVerticalBox)
+
+		+ SVerticalBox::Slot().AutoHeight()
+		[
+			BuildMenuBar()
+		]
 
 		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f)
 		[
@@ -92,34 +113,11 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 
 		+ SVerticalBox::Slot().FillHeight(1.0f)
 		[
-			SNew(SSplitter)
-			.Orientation(Orient_Vertical)
-			+ SSplitter::Slot().Value(0.72f)
+			SAssignNew(DockHost, SBox)
 			[
-				SNew(SHorizontalBox)
-				// Left: read-only hierarchy tree.
-				+ SHorizontalBox::Slot().AutoWidth()
-				[
-					BuildHierarchyPanel()
-				]
-				+ SHorizontalBox::Slot().AutoWidth()
-				[ SNew(SSeparator).Orientation(Orient_Vertical) ]
-				// Center: dual preview canvases.
-				+ SHorizontalBox::Slot().FillWidth(1.0f)
-				[
-						BuildViewer()
-				]
-				+ SHorizontalBox::Slot().AutoWidth()
-				[ SNew(SSeparator).Orientation(Orient_Vertical) ]
-				// Right: read-only changed-properties list.
-				+ SHorizontalBox::Slot().AutoWidth()
-				[
-					BuildSummaryPanel()
-				]
-			]
-			+ SSplitter::Slot().Value(0.28f).MinSize(120.0f)
-			[
-				BuildPropertyInspector()
+				DockManager.IsValid()
+					? DockManager->RestoreFrom(MakeDefaultLayout(), nullptr).ToSharedRef()
+					: TSharedRef<SWidget>(SNew(STextBlock).Text(LOCTEXT("DockUnavailable", "Dock layout unavailable.")))
 			]
 		]
 
@@ -127,6 +125,158 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 	];
 
 	WireSession();
+}
+
+TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildMenuBar()
+{
+	FMenuBarBuilder MenuBarBuilder(nullptr);
+	MenuBarBuilder.AddPullDownMenu(
+		LOCTEXT("FileMenu", "File"),
+		FText::GetEmpty(),
+		FNewMenuDelegate::CreateSP(this, &SUnrealGitWidgetDiffView::FillFileMenu));
+	MenuBarBuilder.AddPullDownMenu(
+		LOCTEXT("ViewMenu", "View"),
+		FText::GetEmpty(),
+		FNewMenuDelegate::CreateSP(this, &SUnrealGitWidgetDiffView::FillViewMenu));
+	MenuBarBuilder.AddPullDownMenu(
+		LOCTEXT("WindowMenu", "Window"),
+		FText::GetEmpty(),
+		FNewMenuDelegate::CreateSP(this, &SUnrealGitWidgetDiffView::FillWindowMenu));
+	return MenuBarBuilder.MakeWidget();
+}
+
+void SUnrealGitWidgetDiffView::FillFileMenu(FMenuBuilder& MenuBuilder)
+{
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("FileClose", "Close"),
+		LOCTEXT("FileCloseTooltip", "Close the widget diff viewer"),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateLambda([this]()
+		{
+			OnCloseClicked();
+		})));
+}
+
+void SUnrealGitWidgetDiffView::FillViewMenu(FMenuBuilder& MenuBuilder)
+{
+	MenuBuilder.BeginSection(FName(TEXT("UnrealGitWidgetDiffViewMode")), LOCTEXT("ViewModeSection", "View Mode"));
+
+	auto AddModeEntry = [this, &MenuBuilder](int32 Index, const FText& Label)
+	{
+		MenuBuilder.AddMenuEntry(
+			Label,
+			FText::GetEmpty(),
+			FSlateIcon(),
+			FUIAction(
+				FExecuteAction::CreateLambda([this, Index]() { SelectViewMode(Index); }),
+				FCanExecuteAction(),
+				FIsActionChecked::CreateLambda([this, Index]() { return IsViewMode(Index); })),
+			NAME_None,
+			EUserInterfaceActionType::RadioButton);
+	};
+
+	AddModeEntry(0, LOCTEXT("ModeSideBySide", "Side by Side"));
+	AddModeEntry(1, LOCTEXT("ModeDifference", "Difference"));
+	AddModeEntry(2, LOCTEXT("ModeOnion", "Onion"));
+	MenuBuilder.EndSection();
+
+	MenuBuilder.BeginSection(FName(TEXT("UnrealGitWidgetDiffViewLayout")), LOCTEXT("ViewLayoutSection", "Layout"));
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("MenuFitToWindow", "Fit to Window"),
+		FText::GetEmpty(),
+		FSlateIcon(),
+		FUIAction(
+			FExecuteAction::CreateSP(this, &SUnrealGitWidgetDiffView::ToggleFitToWindow),
+			FCanExecuteAction(),
+			FIsActionChecked::CreateSP(this, &SUnrealGitWidgetDiffView::IsFitToWindow)),
+		NAME_None,
+		EUserInterfaceActionType::ToggleButton);
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("MenuResetView", "Reset View"),
+		FText::GetEmpty(),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateSP(this, &SUnrealGitWidgetDiffView::ResetViewport)));
+	MenuBuilder.EndSection();
+}
+
+void SUnrealGitWidgetDiffView::SelectViewMode(int32 Index)
+{
+	if (!ModeOptions.IsValidIndex(Index))
+	{
+		return;
+	}
+
+	CurrentModeOption = ModeOptions[Index];
+	switch (Index)
+	{
+	case 0: ViewMode = EViewMode::SideBySide; break;
+	case 1: ViewMode = EViewMode::Difference; break;
+	case 2: ViewMode = EViewMode::Onion; break;
+	default: return;
+	}
+	RequestRefresh();
+}
+
+bool SUnrealGitWidgetDiffView::IsViewMode(int32 Index) const
+{
+	return static_cast<int32>(ViewMode) == Index;
+}
+
+void SUnrealGitWidgetDiffView::ToggleFitToWindow()
+{
+	OnFitChanged(bFitToWindow ? ECheckBoxState::Unchecked : ECheckBoxState::Checked);
+}
+
+bool SUnrealGitWidgetDiffView::IsFitToWindow() const
+{
+	return bFitToWindow;
+}
+
+void SUnrealGitWidgetDiffView::ResetViewport()
+{
+	if (LeftCanvas.IsValid()) LeftCanvas->ResetView();
+	if (RightCanvas.IsValid()) RightCanvas->ResetView();
+	if (DiffCanvas.IsValid()) DiffCanvas->ResetView();
+}
+
+void SUnrealGitWidgetDiffView::FillWindowMenu(FMenuBuilder& MenuBuilder)
+{
+	MenuBuilder.BeginSection(FName(TEXT("UnrealGitWidgetDiffPanels")), LOCTEXT("WindowPanelsSection", "Panels"));
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("WindowHierarchy", "Hierarchy"),
+		FText::GetEmpty(),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateSP(this, &SUnrealGitWidgetDiffView::ShowDockTab, FName(TEXT("UnrealGitWidgetDiff.Hierarchy")))));
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("WindowViewer", "Viewer"),
+		FText::GetEmpty(),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateSP(this, &SUnrealGitWidgetDiffView::ShowDockTab, FName(TEXT("UnrealGitWidgetDiff.Viewer")))));
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("WindowChanges", "Changes"),
+		FText::GetEmpty(),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateSP(this, &SUnrealGitWidgetDiffView::ShowDockTab, FName(TEXT("UnrealGitWidgetDiff.Changes")))));
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("WindowProperties", "Properties"),
+		FText::GetEmpty(),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateSP(this, &SUnrealGitWidgetDiffView::ShowDockTab, FName(TEXT("UnrealGitWidgetDiff.Properties")))));
+	MenuBuilder.EndSection();
+
+	MenuBuilder.AddMenuEntry(
+		LOCTEXT("WindowResetLayout", "Reset Layout"),
+		FText::GetEmpty(),
+		FSlateIcon(),
+		FUIAction(FExecuteAction::CreateSP(this, &SUnrealGitWidgetDiffView::ResetDockLayout)));
+}
+
+void SUnrealGitWidgetDiffView::ShowDockTab(FName TabId)
+{
+	if (DockManager.IsValid())
+	{
+		DockManager->TryInvokeTab(FTabId(TabId));
+	}
 }
 
 TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildToolbar()
@@ -232,9 +382,18 @@ TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildToolbar()
 				.Text(LOCTEXT("ResetView", "Reset View"))
 				.OnClicked_Lambda([this]()
 				{
-					if (LeftCanvas.IsValid()) LeftCanvas->ResetView();
-					if (RightCanvas.IsValid()) RightCanvas->ResetView();
-					if (DiffCanvas.IsValid()) DiffCanvas->ResetView();
+					ResetViewport();
+					return FReply::Handled();
+				})
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f)
+			[
+				SNew(SButton)
+				.Text(LOCTEXT("ResetLayout", "Reset Layout"))
+				.ToolTipText(LOCTEXT("ResetLayoutTooltip", "Restore the default panel docking layout"))
+				.OnClicked_Lambda([this]()
+				{
+					ResetDockLayout();
 					return FReply::Handled();
 				})
 			]
@@ -361,34 +520,29 @@ TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildViewer()
 TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildHierarchyPanel()
 {
 	return
-				SNew(SBox).WidthOverride(260.0f)
-				[
-					SNew(SBorder).Padding(4.0f)
-					[
-						SAssignNew(HierarchyList, STreeView<TSharedPtr<FUnrealGitWidgetNode>>)
-						.TreeItemsSource(&HierarchyRoots)
-						.OnGenerateRow(this, &SUnrealGitWidgetDiffView::OnGenerateHierarchyRow)
-						.OnGetChildren(this, &SUnrealGitWidgetDiffView::OnGetHierarchyChildren)
-						.OnSelectionChanged(this, &SUnrealGitWidgetDiffView::OnHierarchySelectionChanged)
-						.OnMouseButtonClick(this, &SUnrealGitWidgetDiffView::OnHierarchyRowClicked)
-						.SelectionMode(ESelectionMode::Single)
-					]
-				]
+		SNew(SBorder).Padding(4.0f)
+		[
+			SAssignNew(HierarchyList, STreeView<TSharedPtr<FUnrealGitWidgetNode>>)
+			.TreeItemsSource(&HierarchyRoots)
+			.OnGenerateRow(this, &SUnrealGitWidgetDiffView::OnGenerateHierarchyRow)
+			.OnGetChildren(this, &SUnrealGitWidgetDiffView::OnGetHierarchyChildren)
+			.OnSelectionChanged(this, &SUnrealGitWidgetDiffView::OnHierarchySelectionChanged)
+			.OnMouseButtonClick(this, &SUnrealGitWidgetDiffView::OnHierarchyRowClicked)
+			.SelectionMode(ESelectionMode::Single)
+		]
 	;
 }
 
 TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildSummaryPanel()
 {
 	return
-				SNew(SBox).WidthOverride(300.0f)
-				[
-					SNew(SBorder).Padding(4.0f)
-					[
-						SNew(SVerticalBox)
-						+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)
-						[ SAssignNew(DiffSummaryText, STextBlock).Text(LOCTEXT("DiffSummary", "Diff Summary")) ]
-						+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)
-						[
+		SNew(SBorder).Padding(4.0f)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)
+			[ SAssignNew(DiffSummaryText, STextBlock).Text(LOCTEXT("DiffSummary", "Diff Summary")) ]
+			+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)
+			[
 							SNew(SHorizontalBox)
 							+ SHorizontalBox::Slot().AutoWidth().Padding(2.0f)
 							[ SNew(SCheckBox).IsChecked_Lambda([this]() { return bShowAdded ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
@@ -411,8 +565,100 @@ TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildSummaryPanel()
 							.OnSelectionChanged(this, &SUnrealGitWidgetDiffView::OnPropertySelectionChanged)
 						]
 					]
-				]
 	;
+}
+
+void SUnrealGitWidgetDiffView::RegisterDockSpawners()
+{
+	if (!DockManager.IsValid())
+	{
+		return;
+	}
+
+	DockManager->RegisterTabSpawner(TEXT("UnrealGitWidgetDiff.Hierarchy"), FOnSpawnTab::CreateSP(this, &SUnrealGitWidgetDiffView::SpawnHierarchyTab))
+		.SetDisplayName(LOCTEXT("DockTabHierarchy", "Hierarchy"));
+	DockManager->RegisterTabSpawner(TEXT("UnrealGitWidgetDiff.Viewer"), FOnSpawnTab::CreateSP(this, &SUnrealGitWidgetDiffView::SpawnViewerTab))
+		.SetDisplayName(LOCTEXT("DockTabViewer", "Viewer"));
+	DockManager->RegisterTabSpawner(TEXT("UnrealGitWidgetDiff.Changes"), FOnSpawnTab::CreateSP(this, &SUnrealGitWidgetDiffView::SpawnChangesTab))
+		.SetDisplayName(LOCTEXT("DockTabChanges", "Changes"));
+	DockManager->RegisterTabSpawner(TEXT("UnrealGitWidgetDiff.Properties"), FOnSpawnTab::CreateSP(this, &SUnrealGitWidgetDiffView::SpawnPropertiesTab))
+		.SetDisplayName(LOCTEXT("DockTabProperties", "Properties"));
+}
+
+void SUnrealGitWidgetDiffView::ResetDockLayout()
+{
+	if (!DockManager.IsValid() || !DockHost.IsValid())
+	{
+		return;
+	}
+
+	DockManager->CloseAllAreas();
+	DockHost->SetContent(DockManager->RestoreFrom(MakeDefaultLayout(), nullptr).ToSharedRef());
+}
+
+TSharedRef<FTabManager::FLayout> SUnrealGitWidgetDiffView::MakeDefaultLayout()
+{
+	return FTabManager::NewLayout("UnrealGitWidgetDiffWorkspace")
+		->AddArea
+		(
+			FTabManager::NewPrimaryArea()
+			->SetOrientation(Orient_Horizontal)
+			->Split
+			(
+				FTabManager::NewStack()
+				->SetSizeCoefficient(0.2f)
+				->AddTab(TEXT("UnrealGitWidgetDiff.Hierarchy"), ETabState::OpenedTab)
+			)
+			->Split
+			(
+				FTabManager::NewStack()
+				->SetSizeCoefficient(0.55f)
+				->AddTab(TEXT("UnrealGitWidgetDiff.Viewer"), ETabState::OpenedTab)
+			)
+			->Split
+			(
+				FTabManager::NewStack()
+				->SetSizeCoefficient(0.25f)
+				->AddTab(TEXT("UnrealGitWidgetDiff.Properties"), ETabState::OpenedTab)
+				->AddTab(TEXT("UnrealGitWidgetDiff.Changes"), ETabState::OpenedTab)
+			)
+		);
+}
+
+TSharedRef<SDockTab> SUnrealGitWidgetDiffView::SpawnHierarchyTab(const FSpawnTabArgs&)
+{
+	return SNew(SDockTab)
+		.TabRole(ETabRole::PanelTab)
+		[
+			BuildHierarchyPanel()
+		];
+}
+
+TSharedRef<SDockTab> SUnrealGitWidgetDiffView::SpawnViewerTab(const FSpawnTabArgs&)
+{
+	return SNew(SDockTab)
+		.TabRole(ETabRole::PanelTab)
+		[
+			BuildViewer()
+		];
+}
+
+TSharedRef<SDockTab> SUnrealGitWidgetDiffView::SpawnChangesTab(const FSpawnTabArgs&)
+{
+	return SNew(SDockTab)
+		.TabRole(ETabRole::PanelTab)
+		[
+			BuildSummaryPanel()
+		];
+}
+
+TSharedRef<SDockTab> SUnrealGitWidgetDiffView::SpawnPropertiesTab(const FSpawnTabArgs&)
+{
+	return SNew(SDockTab)
+		.TabRole(ETabRole::PanelTab)
+		[
+			BuildPropertyInspector()
+		];
 }
 
 TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildPropertyInspector()

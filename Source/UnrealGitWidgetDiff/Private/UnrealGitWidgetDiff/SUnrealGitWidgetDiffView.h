@@ -3,10 +3,15 @@
 #pragma once
 
 #include "CoreMinimal.h"
+#include "Framework/Docking/TabManager.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/Views/SListView.h"
 #include "Widgets/Views/STreeView.h"
 #include "UnrealGitWidgetDiff/UnrealGitWidgetDiffSession.h"
+
+class SDockTab;
+class FMenuBuilder;
+class FSpawnTabArgs;
 
 /**
  * @class SUnrealGitWidgetDiffView
@@ -17,6 +22,7 @@ class SUnrealGitWidgetDiffView : public SCompoundWidget
 public:
 	SLATE_BEGIN_ARGS(SUnrealGitWidgetDiffView) {}
 		SLATE_ARGUMENT(TSharedPtr<FUnrealGitWidgetDiffSession>, Session)
+		SLATE_ARGUMENT(TWeakPtr<SDockTab>, OwnerTab)
 	SLATE_END_ARGS()
 
 	SUnrealGitWidgetDiffView();
@@ -74,6 +80,45 @@ private:
 
 	/** @return Toolbar widget for the view. */
 	TSharedRef<SWidget> BuildToolbar();
+	/** @return Menu bar with File and Window menus. */
+	TSharedRef<SWidget> BuildMenuBar();
+	/**
+	 * Fills the File menu.
+	 * @param MenuBuilder Menu being built.
+	 */
+	void FillFileMenu(FMenuBuilder& MenuBuilder);
+	/**
+	 * Fills the Window menu with the dock panel entries.
+	 * @param MenuBuilder Menu being built.
+	 */
+	void FillWindowMenu(FMenuBuilder& MenuBuilder);
+	/**
+	 * Fills the View menu with mode and layout entries.
+	 * @param MenuBuilder Menu being built.
+	 */
+	void FillViewMenu(FMenuBuilder& MenuBuilder);
+	/**
+	 * Selects a viewer mode from the menu.
+	 * @param Index 0 = Side by Side, 1 = Difference, 2 = Onion.
+	 */
+	void SelectViewMode(int32 Index);
+	/**
+	 * Reports whether a viewer mode is active.
+	 * @param Index Mode index to test.
+	 * @return True when the mode is active.
+	 */
+	bool IsViewMode(int32 Index) const;
+	/** Toggles fit-to-window from the menu. */
+	void ToggleFitToWindow();
+	/** @return True when the viewer fits content to the window. */
+	bool IsFitToWindow() const;
+	/** Resets the canvases to their default view. */
+	void ResetViewport();
+	/**
+	 * Brings a dock panel tab to the front, reopening it when closed.
+	 * @param TabId Dock tab identifier.
+	 */
+	void ShowDockTab(FName TabId);
 	/** @return Onion-blend slider row widget. */
 	TSharedRef<SWidget> BuildOnionBlendRow();
 	/** @return Viewer widget hosting the canvases. */
@@ -84,6 +129,21 @@ private:
 	TSharedRef<SWidget> BuildSummaryPanel();
 	/** @return Property-difference inspector panel widget. */
 	TSharedRef<SWidget> BuildPropertyInspector();
+
+	/** Restored dock area hosting the draggable panel tabs. */
+	TSharedPtr<class SBox> DockHost;
+	/** Nested tab manager that owns the panel layout. */
+	TSharedPtr<FTabManager> DockManager;
+	/** Registers the panel tab spawners with the nested tab manager. */
+	void RegisterDockSpawners();
+	/** Restores the default dock layout, reopening closed panels. */
+	void ResetDockLayout();
+	/** @return Default dock layout for the viewer. */
+	static TSharedRef<FTabManager::FLayout> MakeDefaultLayout();
+	TSharedRef<SDockTab> SpawnHierarchyTab(const FSpawnTabArgs& Args);
+	TSharedRef<SDockTab> SpawnViewerTab(const FSpawnTabArgs& Args);
+	TSharedRef<SDockTab> SpawnChangesTab(const FSpawnTabArgs& Args);
+	TSharedRef<SDockTab> SpawnPropertiesTab(const FSpawnTabArgs& Args);
 	/** Binds the session's update delegate to the view. */
 	void WireSession();
 

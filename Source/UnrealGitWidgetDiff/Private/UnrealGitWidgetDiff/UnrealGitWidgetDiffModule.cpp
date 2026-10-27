@@ -23,7 +23,7 @@ static TSharedRef<SDockTab> SpawnUnrealGitWidgetDiffTab(const FSpawnTabArgs& Spa
 		.TabRole(ETabRole::NomadTab);
 
 	DockTab->SetContent(
-		SNew(SUnrealGitWidgetDiffView).Session(Session)
+		SNew(SUnrealGitWidgetDiffView).Session(Session).OwnerTab(DockTab)
 	);
 
 	return DockTab;
