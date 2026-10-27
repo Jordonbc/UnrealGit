@@ -10,7 +10,7 @@
  *
  * This parser is deterministic and side-effect free.
  */
-class FGitRevParseParser final
+class UNREALGIT_API FGitRevParseParser final
 {
 public:
 	/**
