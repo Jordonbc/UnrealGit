@@ -32,7 +32,9 @@
 
 #define LOCTEXT_NAMESPACE "UnrealGitWidgetDiffView"
 
-SUnrealGitWidgetDiffView::SUnrealGitWidgetDiffView() {}
+SUnrealGitWidgetDiffView::SUnrealGitWidgetDiffView()
+{
+}
 
 SUnrealGitWidgetDiffView::~SUnrealGitWidgetDiffView()
 {
@@ -98,7 +100,10 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 				.InitiallySelectedItem(CurrentPreviewModeOption)
 				.OnSelectionChanged_Lambda([this](TSharedPtr<FString> NewSelection, ESelectInfo::Type)
 				{
-					if (!NewSelection.IsValid()) return;
+					if (!NewSelection.IsValid())
+					{
+						return;
+					}
 					CurrentPreviewModeOption = NewSelection;
 					EThumbnailPreviewSizeMode Mode = EThumbnailPreviewSizeMode::MatchDesignerMode;
 					if (*NewSelection == TEXT("Fill Screen")) Mode = EThumbnailPreviewSizeMode::FillScreen;
@@ -802,10 +807,22 @@ void SUnrealGitWidgetDiffView::RebuildDiffEntries()
 	PropertyItems.Reset();
 	for (const TSharedPtr<FDiffEntry>& Entry : AllDiffEntries)
 	{
-		if (!Entry.IsValid()) continue;
-		if (Entry->Change == EUnrealGitWidgetChange::Added && !bShowAdded) continue;
-		if (Entry->Change == EUnrealGitWidgetChange::Removed && !bShowRemoved) continue;
-		if (Entry->Change == EUnrealGitWidgetChange::Modified && !bShowModified) continue;
+		if (!Entry.IsValid())
+		{
+			continue;
+		}
+		if (Entry->Change == EUnrealGitWidgetChange::Added && !bShowAdded)
+		{
+			continue;
+		}
+		if (Entry->Change == EUnrealGitWidgetChange::Removed && !bShowRemoved)
+		{
+			continue;
+		}
+		if (Entry->Change == EUnrealGitWidgetChange::Modified && !bShowModified)
+		{
+			continue;
+		}
 		PropertyItems.Add(Entry);
 	}
 	if (PropertyList.IsValid())
@@ -936,11 +953,23 @@ int32 SUnrealGitWidgetDiffView::GetSwitcherIndex() const
 
 void SUnrealGitWidgetDiffView::OnModeChanged(TSharedPtr<FString> NewSelection, ESelectInfo::Type /*SelectInfo*/)
 {
-	if (!NewSelection.IsValid()) return;
+	if (!NewSelection.IsValid())
+	{
+		return;
+	}
 	CurrentModeOption = NewSelection;
-	if (*NewSelection == TEXT("Side by Side")) ViewMode = EViewMode::SideBySide;
-	else if (*NewSelection == TEXT("Difference")) ViewMode = EViewMode::Difference;
-	else if (*NewSelection == TEXT("Onion")) ViewMode = EViewMode::Onion;
+	if (*NewSelection == TEXT("Side by Side"))
+	{
+		ViewMode = EViewMode::SideBySide;
+	}
+	else if (*NewSelection == TEXT("Difference"))
+	{
+		ViewMode = EViewMode::Difference;
+	}
+	else if (*NewSelection == TEXT("Onion"))
+	{
+		ViewMode = EViewMode::Onion;
+	}
 	RequestRefresh();
 }
 
