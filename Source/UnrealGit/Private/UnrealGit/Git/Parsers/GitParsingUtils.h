@@ -78,7 +78,7 @@ namespace UnrealGit::Parsing
 		/**
 		 * Reads the next NUL-delimited token.
 		 *
-		 * @param OutToken Receives the next token slice (may be empty for empty segments, which are skipped).
+		 * @param OutToken Receives the next token slice (may be empty for empty segments).
 		 * @return True when a token was read; false when the end of the buffer has been reached.
 		 */
 		bool ReadNext(TArrayView<const uint8>& OutToken)
