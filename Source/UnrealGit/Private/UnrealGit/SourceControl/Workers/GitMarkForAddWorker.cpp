@@ -30,40 +30,27 @@ void FGitMarkForAddWorker::Execute(
 		return;
 	}
 
-	FGitProcessRequest AddRequest;
-	AddRequest.WorkingDirectory = FString();
-	AddRequest.RepoRoot = RepoRoot;
-	AddRequest.Arguments = {
-		TEXT("add"),
-		TEXT("-N"),
-		TEXT("--")
-	};
-
-	for (const FString& AbsolutePath : Files)
-	{
-		FString Relative;
-		if (!UnrealGit::Workers::TryMakeRepoRelativePath(RepoRoot, AbsolutePath, Relative))
-		{
-			OutOutput.bSuccess = false;
-			OutOutput.ErrorText = FText::FromString(TEXT("File is outside the Git repository root."));
-			return;
-		}
-		AddRequest.Arguments.Add(Relative);
-	}
-
-	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("MarkForAdd: Running git add with WorkingDirectory='%s', args='%s'"), 
-		*AddRequest.WorkingDirectory, *FString::Join(AddRequest.Arguments, TEXT(" ")));
-
-	const FGitProcessResult AddResult = ProcessRunner->Run(AddRequest);
-	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("MarkForAdd: git add result: exit=%d, stdout='%s', stderr='%s'"), 
-		AddResult.ExitCode, 
-		*UnrealGit::Workers::BytesToTextUtf8Lossy(AddResult.StdOut).Left(200),
-		*UnrealGit::Workers::BytesToTextUtf8Lossy(AddResult.StdErr).Left(200));
-
-	if (AddResult.ExitCode != 0)
+	if (Files.Num() == 0)
 	{
 		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(AddResult.StdErr));
+		OutOutput.ErrorText = FText::FromString(TEXT("No files specified."));
+		return;
+	}
+
+	TArray<FString> RelativePaths;
+	FString ConvertError;
+	if (!UnrealGit::Workers::TryMakeRepoRelativePaths(RepoRoot, Files, RelativePaths, ConvertError))
+	{
+		OutOutput.bSuccess = false;
+		OutOutput.ErrorText = FText::FromString(ConvertError.IsEmpty() ? TEXT("File is outside the Git repository root.") : ConvertError);
+		return;
+	}
+
+	FString AddError;
+	if (!UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, { TEXT("add"), TEXT("-N") }, RelativePaths, AddError))
+	{
+		OutOutput.bSuccess = false;
+		OutOutput.ErrorText = FText::FromString(AddError);
 		return;
 	}
 

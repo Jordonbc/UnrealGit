@@ -32,6 +32,7 @@ public class UnrealGit : ModuleRules
 				"SourceControlWindows",
 				"AssetTools",
 				"ToolMenus",
+				"DesktopPlatform",
 			}
 			);
 		

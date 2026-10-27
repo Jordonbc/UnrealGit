@@ -21,6 +21,7 @@ void FUnrealGitSourceControlState::UpdateFromStatus(const FGitFileStatus& InStat
 	bIsUnstaged = InStatus.bIsUnstaged;
 	bIsTracked = InStatus.bIsTracked;
 	bIsConflicted = InStatus.bIsConflicted;
+	ResolveInfo = InStatus.ResolveInfo;
 }
 
 void FUnrealGitSourceControlState::SetLockState(EGitLockState InLockState, FString InLockOwner)
@@ -44,8 +45,20 @@ TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FUnrealGitSourceControlS
 	return History.IsValidIndex(HistoryIndex) ? History[HistoryIndex] : TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe>();
 }
 
-TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FUnrealGitSourceControlState::FindHistoryRevision(int32 /*RevisionNumber*/) const
+TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FUnrealGitSourceControlState::FindHistoryRevision(int32 RevisionNumber) const
 {
+	if (RevisionNumber == INVALID_REVISION)
+	{
+		return TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe>();
+	}
+
+	for (const TSharedRef<ISourceControlRevision, ESPMode::ThreadSafe>& Rev : History)
+	{
+		if (Rev->GetRevisionNumber() == RevisionNumber)
+		{
+			return Rev;
+		}
+	}
 	return TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe>();
 }
 
@@ -64,6 +77,19 @@ TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FUnrealGitSourceControlS
 TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FUnrealGitSourceControlState::GetCurrentRevision() const
 {
 	return History.Num() > 0 ? History[0] : TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe>();
+}
+
+ISourceControlState::FResolveInfo FUnrealGitSourceControlState::GetResolveInfo() const
+{
+	FResolveInfo Info;
+	if (ResolveInfo.IsSet())
+	{
+		Info.RemoteFile = ResolveInfo->RemoteFile;
+		Info.BaseFile = ResolveInfo->BaseFile;
+		Info.RemoteRevision = ResolveInfo->RemoteRevision;
+		Info.BaseRevision = ResolveInfo->BaseRevision;
+	}
+	return Info;
 }
 
 #if SOURCE_CONTROL_WITH_SLATE

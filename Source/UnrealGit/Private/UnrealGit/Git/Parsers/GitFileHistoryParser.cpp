@@ -6,6 +6,27 @@
 
 namespace UnrealGit::HistoryParsing
 {
+	static FString LogStatusToAction(const FString& StatusCode)
+	{
+		if (StatusCode.IsEmpty())
+		{
+			return TEXT("modified");
+		}
+
+		switch (StatusCode[0])
+		{
+		case TEXT('M'): return TEXT("modified");
+		case TEXT('A'): return TEXT("add");
+		case TEXT('D'): return TEXT("delete");
+		case TEXT('R'): return TEXT("branch");
+		case TEXT('C'): return TEXT("branch");
+		case TEXT('T'): return TEXT("type changed");
+		case TEXT('U'): return TEXT("unmerged");
+		case TEXT('X'): return TEXT("unknown");
+		default: return TEXT("modified");
+		}
+	}
+
 	static bool ParseMetadataLine(const TArrayView<const uint8> LineBytes, FGitRevisionInfo& OutInfo)
 	{
 		// Fields: commit, author name, author email, author date, subject
@@ -113,6 +134,7 @@ bool FGitFileHistoryParser::Parse(const TArray<uint8>& StdOut, const FString& In
 
 		const TArrayView<const uint8> MetaLine = RecordView.Slice(0, LineEnd);
 		FGitRevisionInfo Info;
+		Info.Action = TEXT("modified");
 		if (!UnrealGit::HistoryParsing::ParseMetadataLine(MetaLine, Info))
 		{
 			OutError = TEXT("Failed to parse git log metadata record.");
@@ -160,6 +182,11 @@ bool FGitFileHistoryParser::Parse(const TArray<uint8>& StdOut, const FString& In
 				continue;
 			}
 
+			if (OutHistory.Num() > 0)
+			{
+				OutHistory.Last().Revision.Action = UnrealGit::HistoryParsing::LogStatusToAction(StatusCode);
+			}
+
 			if (StatusCode.StartsWith(TEXT("R")) || StatusCode.StartsWith(TEXT("C")))
 			{
 				TArrayView<const uint8> TokenB;
@@ -177,6 +204,92 @@ bool FGitFileHistoryParser::Parse(const TArray<uint8>& StdOut, const FString& In
 		}
 	}
 
+	const int32 NumRevisions = OutHistory.Num();
+	for (int32 RevisionIndex = 0; RevisionIndex < NumRevisions; ++RevisionIndex)
+	{
+		OutHistory[RevisionIndex].Revision.RevisionNumber = NumRevisions - RevisionIndex;
+	}
+
 	return true;
+}
+
+static void FillSizesFromBatchCheckOutput(const FString& StdOut, TArray<FGitFileRevision>* InOutHistory, TArray<int32>* OutSizes)
+{
+	TArray<FString> Lines;
+	StdOut.ParseIntoArray(Lines, TEXT("\n"), false);
+
+	int32 Count = 0;
+	if (InOutHistory)
+	{
+		Count = InOutHistory->Num();
+	}
+	else if (OutSizes)
+	{
+		int32 LineCount = Lines.Num();
+		if (LineCount > 0 && Lines[LineCount - 1].IsEmpty())
+		{
+			--LineCount;
+		}
+		Count = LineCount;
+	}
+
+	if (OutSizes)
+	{
+		OutSizes->Reset();
+	}
+
+	for (int32 i = 0; i < Count; ++i)
+	{
+		int32 Size = 0;
+		if (i < Lines.Num())
+		{
+			const FString Line = Lines[i].TrimEnd();
+			TArray<FString> Tokens;
+			Line.ParseIntoArrayWS(Tokens);
+			if (Tokens.Num() >= 3 && Tokens[1] == TEXT("blob"))
+			{
+				if (Tokens[2].IsNumeric())
+				{
+					Size = FCString::Atoi(*Tokens[2]);
+				}
+			}
+		}
+
+		if (InOutHistory && i < InOutHistory->Num())
+		{
+			(*InOutHistory)[i].Revision.FileSize = Size;
+		}
+		if (OutSizes)
+		{
+			OutSizes->Add(Size);
+		}
+	}
+}
+
+void FGitFileHistoryParser::ParseCatFileBatchCheckOutput(const FString& StdOut, TArray<FGitFileRevision>& InOutRevisions)
+{
+	FillSizesFromBatchCheckOutput(StdOut, &InOutRevisions, nullptr);
+}
+
+void FGitFileHistoryParser::ParseCatFileBatchCheckOutput(const TArray<uint8>& StdOut, TArray<FGitFileRevision>& InOutRevisions)
+{
+	FillSizesFromBatchCheckOutput(UnrealGit::Parsing::Utf8BytesToString(StdOut), &InOutRevisions, nullptr);
+}
+
+void FGitFileHistoryParser::ParseCatFileBatchCheck(const FString& StdOut, TArray<FGitFileRevision>& InOutRevisions)
+{
+	ParseCatFileBatchCheckOutput(StdOut, InOutRevisions);
+}
+
+void FGitFileHistoryParser::ParseCatFileBatchCheck(const FString& StdOut, TArray<int32>& OutSizes)
+{
+	FillSizesFromBatchCheckOutput(StdOut, nullptr, &OutSizes);
+}
+
+TArray<int32> FGitFileHistoryParser::ParseCatFileBatchCheckSizes(const FString& StdOut)
+{
+	TArray<int32> Sizes;
+	FillSizesFromBatchCheckOutput(StdOut, nullptr, &Sizes);
+	return Sizes;
 }
 

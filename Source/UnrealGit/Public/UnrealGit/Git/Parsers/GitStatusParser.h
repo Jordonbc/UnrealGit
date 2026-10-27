@@ -20,4 +20,6 @@ class UNREALGIT_API FGitStatusParser final
 {
 public:
 	static bool ParsePorcelainV2Z(const TArray<uint8>& StdOut, FGitStatusSnapshot& OutSnapshot, FString& OutError);
+
+	static bool ParseUnmergedZ(const TArray<uint8>& StdOut, TMap<FString, FGitResolveInfo>& OutResolveInfo, FString& OutError);
 };

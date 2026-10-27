@@ -5,6 +5,7 @@
 #include "HAL/FileManager.h"
 #include "HAL/PlatformMisc.h"
 #include "Misc/Paths.h"
+#include "UnrealGit/Private/UnrealGit/Git/GitBinaryFinder.h"
 #include "UnrealGit/Settings/UnrealGitProjectSettings.h"
 #include "UnrealGit/Settings/UnrealGitUserSettings.h"
 
@@ -108,7 +109,14 @@ bool FUnrealGitSettingsResolver::Build(FUnrealGitProviderSettings& OutSettings, 
 	const UUnrealGitProjectSettings* Project = GetDefault<UUnrealGitProjectSettings>();
 	const UUnrealGitUserSettings* User = GetDefault<UUnrealGitUserSettings>();
 
-	OutSettings.GitExecutable = User && !User->GitExecutableOverride.FilePath.IsEmpty() ? User->GitExecutableOverride.FilePath : FString(TEXT("git"));
+	FString GitExecutable = User && !User->GitExecutableOverride.FilePath.IsEmpty()
+		? User->GitExecutableOverride.FilePath
+		: UnrealGit::Git::FindGitBinary();
+	if (GitExecutable.IsEmpty())
+	{
+		GitExecutable = TEXT("git");
+	}
+	OutSettings.GitExecutable = GitExecutable;
 	OutSettings.RepositoryDiscoveryDirectory = Project && !Project->RepositoryRootOverride.Path.IsEmpty()
 		? Project->RepositoryRootOverride.Path
 		: FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());

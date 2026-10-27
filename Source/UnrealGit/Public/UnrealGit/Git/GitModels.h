@@ -35,6 +35,24 @@ enum class EGitLockState : uint8
 };
 
 /**
+ * Merge-conflict details for a single file, derived from `git ls-files --unmerged`.
+ *
+ * Mirrors ISourceControlState::FResolveInfo so the editor can offer merge tooling.
+ */
+struct FGitResolveInfo final
+{
+	FString RemoteFile;
+	FString BaseFile;
+	FString RemoteRevision;
+	FString BaseRevision;
+
+	bool IsValid() const
+	{
+		return !BaseFile.IsEmpty() || !RemoteFile.IsEmpty();
+	}
+};
+
+/**
  * Parsed file status from `git status --porcelain=v2 -z`.
  */
 struct FGitFileStatus final
@@ -48,6 +66,9 @@ struct FGitFileStatus final
 
 	bool bIsTracked = false;
 	bool bIsConflicted = false;
+
+	/** Set only for conflicted files when unmerged index stages are available. */
+	TOptional<FGitResolveInfo> ResolveInfo;
 };
 
 /**
@@ -92,6 +113,15 @@ struct FGitRevisionInfo final
 	FDateTime AuthorDateUtc = FDateTime(0);
 	FString Subject;
 	FString Body;
+
+	/** Human-readable action for this revision ("edit", "add", "delete", "branch", ...). */
+	FString Action;
+
+	/** 1-based rank within the file history, oldest revision = 1. */
+	int32 RevisionNumber = 0;
+
+	/** Size in bytes of the file at this revision, or 0 when unknown. */
+	int32 FileSize = 0;
 };
 
 /**

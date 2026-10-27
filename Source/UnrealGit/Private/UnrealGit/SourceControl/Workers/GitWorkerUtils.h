@@ -153,6 +153,110 @@ namespace UnrealGit::Workers
 		return true;
 	}
 
+	/**
+	 * Maximum number of paths passed to a single git invocation.
+	 *
+	 * Matches the engine's batching limit and keeps command lines below the
+	 * Windows CreateProcess limit for large submits and status queries.
+	 */
+	static constexpr int32 MaxFilesPerCommand = 50;
+
+	/** Converts absolute paths to repo-relative paths, failing on the first path outside the repository. */
+	inline bool TryMakeRepoRelativePaths(
+		const FString& RepoRoot,
+		const TArray<FString>& AbsolutePaths,
+		TArray<FString>& OutRelativePaths,
+		FString& OutError)
+	{
+		OutRelativePaths.Reset();
+		OutRelativePaths.Reserve(AbsolutePaths.Num());
+		OutError.Reset();
+
+		for (const FString& AbsolutePath : AbsolutePaths)
+		{
+			FString Relative;
+			if (!TryMakeRepoRelativePath(RepoRoot, AbsolutePath, Relative))
+			{
+				OutError = FString::Printf(TEXT("File is outside the Git repository root: %s"), *AbsolutePath);
+				return false;
+			}
+			OutRelativePaths.Add(MoveTemp(Relative));
+		}
+
+		return true;
+	}
+
+	/** Invokes Func once per chunk of at most BatchSize paths. */
+	template <typename FuncType>
+	void ForEachPathBatch(const TArray<FString>& Paths, int32 BatchSize, FuncType&& Func)
+	{
+		const int32 EffectiveBatchSize = FMath::Max(1, BatchSize);
+		for (int32 Start = 0; Start < Paths.Num(); Start += EffectiveBatchSize)
+		{
+			const int32 End = FMath::Min(Start + EffectiveBatchSize, Paths.Num());
+
+			TArray<FString> Batch;
+			Batch.Reserve(End - Start);
+			for (int32 Index = Start; Index < End; ++Index)
+			{
+				Batch.Add(Paths[Index]);
+			}
+
+			Func(Batch);
+		}
+	}
+
+	/**
+	 * Runs a git command whose trailing arguments are a list of repo-relative paths,
+	 * automatically batching them and separating them with "--".
+	 *
+	 * PrefixArguments must not include the "--" separator.
+	 */
+	inline bool RunGitWithBatchedPaths(
+		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
+		const FString& RepoRoot,
+		const TArray<FString>& PrefixArguments,
+		const TArray<FString>& RelativePaths,
+		FString& OutError)
+	{
+		OutError.Reset();
+
+		if (RelativePaths.Num() == 0)
+		{
+			return true;
+		}
+
+		bool bSucceeded = true;
+		ForEachPathBatch(RelativePaths, MaxFilesPerCommand, [&](const TArray<FString>& Batch)
+		{
+			if (!bSucceeded)
+			{
+				return;
+			}
+
+			FGitProcessRequest Request;
+			Request.RepoRoot = RepoRoot;
+			Request.WorkingDirectory = FString();
+			Request.Arguments = PrefixArguments;
+			Request.Arguments.Add(TEXT("--"));
+			Request.Arguments.Append(Batch);
+
+			const FGitProcessResult Result = ProcessRunner->Run(Request);
+			if (Result.ExitCode != 0)
+			{
+				bSucceeded = false;
+				OutError = BytesToTextUtf8Lossy(Result.StdErr).TrimStartAndEnd();
+				if (OutError.IsEmpty())
+				{
+					OutError = FString::Printf(TEXT("git %s failed with exit code %d."),
+						*FString::Join(PrefixArguments, TEXT(" ")), Result.ExitCode);
+				}
+			}
+		});
+
+		return bSucceeded;
+	}
+
 	inline bool TryFixCorruptedIndex(
 		const TSharedPtr<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
 		const FString& RepoRoot)
@@ -210,6 +314,7 @@ namespace UnrealGit::Workers
 			TEXT("--date=iso-strict"),
 			TEXT("--name-status"),
 			TEXT("-z"),
+			TEXT("--max-count=1000"),
 			TEXT("--pretty=format:%x1e%H%x1f%an%x1f%ae%x1f%ad%x1f%s%x0a"),
 			TEXT("--"),
 			Relative,
@@ -225,6 +330,29 @@ namespace UnrealGit::Workers
 		if (!FGitFileHistoryParser::Parse(LogResult.StdOut, Relative, OutRevisions, OutError))
 		{
 			return false;
+		}
+
+		if (OutRevisions.Num() > 0)
+		{
+			FString StdInStr;
+			for (const FGitFileRevision& Revision : OutRevisions)
+			{
+				StdInStr += FString::Printf(TEXT("%s:%s\n"), *Revision.Revision.CommitId, *Revision.RepoRelativePathAtRevision);
+			}
+
+			FTCHARToUTF8 Utf8(*StdInStr);
+			FGitProcessRequest SizeRequest;
+			SizeRequest.RepoRoot = RepoRoot;
+			SizeRequest.WorkingDirectory = FString();
+			SizeRequest.Arguments = { TEXT("cat-file"), TEXT("--batch-check") };
+			SizeRequest.StdIn.Append(reinterpret_cast<const uint8*>(Utf8.Get()), Utf8.Length());
+
+			const FGitProcessResult SizeResult = ProcessRunner->Run(SizeRequest);
+			if (SizeResult.ExitCode == 0)
+			{
+				const FString SizeStdOut = BytesToTextUtf8Lossy(SizeResult.StdOut);
+				FGitFileHistoryParser::ParseCatFileBatchCheckOutput(SizeStdOut, OutRevisions);
+			}
 		}
 
 		return true;

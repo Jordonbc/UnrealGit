@@ -27,4 +27,20 @@ public:
 	 * @param OutError Error message on parse failure.
 	 */
 	static bool Parse(const TArray<uint8>& StdOut, const FString& InitialRepoRelativePath, TArray<FGitFileRevision>& OutHistory, FString& OutError);
+
+	/**
+	 * Parses the stdout of `git cat-file --batch-check` and fills FileSize for each
+	 * revision in OutRevisions, in order. Missing/ambiguous/empty responses leave 0.
+	 */
+	static void ParseCatFileBatchCheckOutput(const FString& StdOut, TArray<FGitFileRevision>& InOutRevisions);
+	static void ParseCatFileBatchCheckOutput(const TArray<uint8>& StdOut, TArray<FGitFileRevision>& InOutRevisions);
+
+	/** Alias for ParseCatFileBatchCheckOutput (unit-test friendly). */
+	static void ParseCatFileBatchCheck(const FString& StdOut, TArray<FGitFileRevision>& InOutRevisions);
+
+	/** Alias that fills a sizes array (one entry per response line). */
+	static void ParseCatFileBatchCheck(const FString& StdOut, TArray<int32>& OutSizes);
+
+	/** Alias returning the parsed sizes. */
+	static TArray<int32> ParseCatFileBatchCheckSizes(const FString& StdOut);
 };

@@ -3,6 +3,7 @@
 #include "UnrealGit/SourceControl/UnrealGitSourceControlRevision.h"
 
 #include "Async/Async.h"
+#include "Misc/Parse.h"
 #include "UnrealGit/Git/GitRevisionMaterializer.h"
 #include "UnrealGit/Git/IGitProcessRunner.h"
 
@@ -20,7 +21,6 @@ FUnrealGitSourceControlRevision::FUnrealGitSourceControlRevision(
 	, ProcessRunner(MoveTemp(InProcessRunner))
 	, Materializer(MoveTemp(InMaterializer))
 {
-	CachedAction = TEXT("edit");
 }
 
 bool FUnrealGitSourceControlRevision::TryCompleteMaterialization(FString& InOutFilename) const
@@ -177,7 +177,7 @@ const FString& FUnrealGitSourceControlRevision::GetRevision() const
 
 int32 FUnrealGitSourceControlRevision::GetRevisionNumber() const
 {
-	return 0;
+	return RevisionInfo.RevisionNumber;
 }
 
 const FString& FUnrealGitSourceControlRevision::GetDescription() const
@@ -198,27 +198,35 @@ const FDateTime& FUnrealGitSourceControlRevision::GetDate() const
 
 const FString& FUnrealGitSourceControlRevision::GetAction() const
 {
-	return CachedAction;
+	static const FString DefaultAction(TEXT("edit"));
+	return RevisionInfo.Action.IsEmpty() ? DefaultAction : RevisionInfo.Action;
 }
 
 int32 FUnrealGitSourceControlRevision::GetCheckInIdentifier() const
 {
-	return 0;
+	// Git has no numeric changeset id; use a stable prefix of the commit hash.
+	return RevisionInfo.CommitId.IsEmpty() ? 0 : static_cast<int32>(FParse::HexNumber(*RevisionInfo.CommitId.Left(8)));
 }
 
 int32 FUnrealGitSourceControlRevision::GetFileSize() const
 {
-	return 0;
+	return RevisionInfo.FileSize;
 }
 
 const FString& FUnrealGitSourceControlRevision::GetClientSpec() const
 {
-	return CachedClientSpec;
+	static const FString EmptyClientSpec;
+	return EmptyClientSpec;
 }
 
 TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> FUnrealGitSourceControlRevision::GetBranchSource() const
 {
-	return TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe>();
+	return BranchSource;
+}
+
+void FUnrealGitSourceControlRevision::SetBranchSource(TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> InBranchSource)
+{
+	BranchSource = MoveTemp(InBranchSource);
 }
 
 bool FUnrealGitSourceControlRevision::GetAnnotated(FString& /*InOutFilename*/) const

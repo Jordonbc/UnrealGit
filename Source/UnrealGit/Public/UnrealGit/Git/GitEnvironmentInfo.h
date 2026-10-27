@@ -21,5 +21,8 @@ struct FGitEnvironmentInfo final
 
 	FString UserName;
 	FString UserEmail;
+
+	FString BranchName;
+	FString RemoteUrl;
 };
 

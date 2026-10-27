@@ -3,8 +3,10 @@
 #include "UnrealGit/SourceControl/UnrealGitSourceControlProvider.h"
 
 #include "Async/Async.h"
+#include "HAL/FileManager.h"
 #include "ISourceControlOperation.h"
 #include "ISourceControlModule.h"
+#include "Misc/Paths.h"
 #include "SourceControlOperations.h"
 #include "UnrealGit/Git/IGitProcessRunner.h"
 #include "UnrealGit/Git/GitModels.h"
@@ -15,6 +17,9 @@
 #include "UnrealGit/Private/UnrealGit/Settings/UnrealGitSettingsResolver.h"
 #include "UnrealGit/Settings/UnrealGitProjectSettings.h"
 #include "UnrealGit/Settings/UnrealGitUserSettings.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitCopyWorker.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitDeleteWorker.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitResolveWorker.h"
 #include "UnrealGit/SourceControl/Workers/GitCheckInWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitCheckOutWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitGetHistoryWorker.h"
@@ -30,9 +35,34 @@
 #include "UnrealGit/SourceControl/UnrealGitSourceControlRevision.h"
 
 #if SOURCE_CONTROL_WITH_SLATE
+#include "UnrealGit/Private/UnrealGit/UI/SUnrealGitSettingsWidget.h"
 #include "Styling/AppStyle.h"
 #include "Widgets/SNullWidget.h"
 #endif // SOURCE_CONTROL_WITH_SLATE
+
+static FString FindRepositoryRootPath(const FString& StartDirectory)
+{
+	FString Current = FPaths::ConvertRelativePathToFull(StartDirectory);
+	FPaths::NormalizeDirectoryName(Current);
+
+	for (int32 Depth = 0; Depth < 64 && !Current.IsEmpty(); ++Depth)
+	{
+		const FString GitPath = FPaths::Combine(Current, TEXT(".git"));
+		if (IFileManager::Get().DirectoryExists(*GitPath) || IFileManager::Get().FileExists(*GitPath))
+		{
+			return Current;
+		}
+
+		const FString Parent = FPaths::GetPath(Current);
+		if (Parent.IsEmpty() || Parent == Current)
+		{
+			break;
+		}
+		Current = Parent;
+	}
+
+	return FString();
+}
 
 struct FUnrealGitSourceControlProvider::FCommand final
 {
@@ -93,6 +123,10 @@ void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
 
 	ProcessRunner = MakeShared<FSystemGitProcessRunner, ESPMode::ThreadSafe>(Settings.GitExecutable);
 
+	// Filesystem-only repository detection so IsEnabled() is meaningful before any worker runs.
+	RepoRoot = FindRepositoryRootPath(GetWorkingDirectoryHint());
+	bRepositoryFound = !RepoRoot.IsEmpty();
+
 	const FString SessionDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::DiffDir(), TEXT("UnrealGit"), FGuid::NewGuid().ToString(EGuidFormats::Digits)));
 	RevisionMaterializer = MakeShared<FGitRevisionMaterializer, ESPMode::ThreadSafe>(SessionDir);
 
@@ -109,6 +143,7 @@ void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
 				FScopeLock Scope(&EnvironmentLock);
 				EnvironmentInfo = Info;
 			}
+			bGitAvailable = Info.bGitAvailable;
 			UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Environment: GitAvailable=%s GitVersion=\"%s\" LfsAvailable=%s LfsVersion=\"%s\" User=\"%s\" Email=\"%s\""),
 				Info.bGitAvailable ? TEXT("true") : TEXT("false"),
 				*Info.GitVersion,
@@ -147,6 +182,10 @@ void FUnrealGitSourceControlProvider::Close()
 		FScopeLock Scope(&EnvironmentLock);
 		EnvironmentInfo.Reset();
 	}
+
+	RepoRoot.Reset();
+	bRepositoryFound = false;
+	bGitAvailable = true;
 }
 
 const FName& FUnrealGitSourceControlProvider::GetName() const
@@ -189,28 +228,35 @@ FText FUnrealGitSourceControlProvider::GetStatusText() const
 
 	if (bHasEnv)
 	{
-		return FText::FromString(FString::Printf(TEXT("UnrealGit: Connected (git %s, lfs %s)"), *LocalEnv.GitVersion, *LocalEnv.GitLfsVersion));
+		const FString BranchName = LocalEnv.BranchName.IsEmpty() ? FString(TEXT("unknown")) : LocalEnv.BranchName;
+		const FString RemoteUrl = LocalEnv.RemoteUrl.IsEmpty() ? FString(TEXT("none")) : LocalEnv.RemoteUrl;
+		const FString UserName = LocalEnv.UserName.IsEmpty() ? FString(TEXT("unknown")) : LocalEnv.UserName;
+		const FString UserEmail = LocalEnv.UserEmail.IsEmpty() ? FString(TEXT("unknown")) : LocalEnv.UserEmail;
+
+		return FText::FromString(FString::Printf(
+			TEXT("Local repository: %s / Remote origin: %s / Branch: %s / User: %s / E-mail: %s / git %s, lfs %s"),
+			*RepoRoot, *RemoteUrl, *BranchName, *UserName, *UserEmail, *LocalEnv.GitVersion, *LocalEnv.GitLfsVersion));
 	}
 
-	return FText::FromString(TEXT("UnrealGit: Connected"));
+	return FText::FromString(FString::Printf(TEXT("Local repository: %s"), *RepoRoot));
 }
 
 bool FUnrealGitSourceControlProvider::IsEnabled() const
 {
-	return true;
+	return bRepositoryFound;
 }
 
 bool FUnrealGitSourceControlProvider::IsAvailable() const
 {
-	return ProcessRunner.IsValid();
+	return ProcessRunner.IsValid() && bGitAvailable;
 }
 
 TMap<ISourceControlProvider::EStatus, FString> FUnrealGitSourceControlProvider::GetStatus() const
 {
 	TMap<EStatus, FString> Status;
 
-	Status.Add(EStatus::Enabled, TEXT("true"));
-	Status.Add(EStatus::Connected, RepoRoot.IsEmpty() ? TEXT("false") : TEXT("true"));
+	Status.Add(EStatus::Enabled, IsEnabled() ? TEXT("true") : TEXT("false"));
+	Status.Add(EStatus::Connected, (IsAvailable() && !RepoRoot.IsEmpty()) ? TEXT("true") : TEXT("false"));
 	Status.Add(EStatus::Repository, RepoRoot);
 
 	{
@@ -220,6 +266,8 @@ TMap<ISourceControlProvider::EStatus, FString> FUnrealGitSourceControlProvider::
 			Status.Add(EStatus::User, EnvironmentInfo->UserName);
 			Status.Add(EStatus::Email, EnvironmentInfo->UserEmail);
 			Status.Add(EStatus::ScmVersion, EnvironmentInfo->GitVersion);
+			Status.Add(EStatus::Branch, EnvironmentInfo->BranchName);
+			Status.Add(EStatus::Remote, EnvironmentInfo->RemoteUrl);
 		}
 	}
 
@@ -260,6 +308,11 @@ FSourceControlStateRef FUnrealGitSourceControlProvider::GetOrCreateStateInternal
 
 ECommandResult::Type FUnrealGitSourceControlProvider::GetState(const TArray<FString>& InFiles, TArray<FSourceControlStateRef>& OutState, EStateCacheUsage::Type InStateCacheUsage)
 {
+	if (!IsEnabled())
+	{
+		return ECommandResult::Failed;
+	}
+
 	OutState.Reset();
 	OutState.Reserve(InFiles.Num());
 
@@ -403,6 +456,43 @@ void FUnrealGitSourceControlProvider::StartEnvironmentValidation()
 			}
 		}
 
+		{
+			FGitProcessRequest BranchRequest;
+			BranchRequest.WorkingDirectory = WorkingDir;
+			BranchRequest.Arguments = { TEXT("symbolic-ref"), TEXT("--short"), TEXT("--quiet"), TEXT("HEAD") };
+			const FGitProcessResult Res = Runner->Run(BranchRequest);
+			if (Res.ExitCode == 0)
+			{
+				Info.BranchName = UnrealGit::Workers::BytesToTextUtf8Lossy(Res.StdOut).TrimStartAndEnd();
+			}
+			else
+			{
+				FGitProcessRequest DetachedRequest;
+				DetachedRequest.WorkingDirectory = WorkingDir;
+				DetachedRequest.Arguments = { TEXT("log"), TEXT("-1"), TEXT("--format=%h") };
+				const FGitProcessResult DetachedRes = Runner->Run(DetachedRequest);
+				if (DetachedRes.ExitCode == 0)
+				{
+					const FString ShortHash = UnrealGit::Workers::BytesToTextUtf8Lossy(DetachedRes.StdOut).TrimStartAndEnd();
+					if (!ShortHash.IsEmpty())
+					{
+						Info.BranchName = FString::Printf(TEXT("HEAD detached at %s"), *ShortHash);
+					}
+				}
+			}
+		}
+
+		{
+			FGitProcessRequest RemoteRequest;
+			RemoteRequest.WorkingDirectory = WorkingDir;
+			RemoteRequest.Arguments = { TEXT("remote"), TEXT("get-url"), TEXT("origin") };
+			const FGitProcessResult Res = Runner->Run(RemoteRequest);
+			if (Res.ExitCode == 0)
+			{
+				Info.RemoteUrl = UnrealGit::Workers::BytesToTextUtf8Lossy(Res.StdOut).TrimStartAndEnd();
+			}
+		}
+
 		return Info;
 	});
 }
@@ -423,6 +513,13 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 		return ECommandResult::Failed;
 	}
 
+	if (!IsEnabled() && OpName != "Connect")
+	{
+		LastErrorText = FText::FromString(TEXT("UnrealGit: not connected to a Git repository."));
+		UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: Execute(%s) rejected: %s"), *OpName.ToString(), *LastErrorText.ToString());
+		return ECommandResult::Failed;
+	}
+
 	TUniquePtr<IGitSourceControlWorker> Worker;
 	if (OpName == "UpdateStatus" || OpName == "Connect")
 	{
@@ -435,6 +532,18 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	else if (OpName == "MarkForAdd")
 	{
 		Worker = MakeUnique<FGitMarkForAddWorker>();
+	}
+	else if (OpName == "Delete")
+	{
+		Worker = MakeUnique<FGitDeleteWorker>();
+	}
+	else if (OpName == "Copy")
+	{
+		Worker = MakeUnique<FGitCopyWorker>();
+	}
+	else if (OpName == "Resolve")
+	{
+		Worker = MakeUnique<FGitResolveWorker>();
 	}
 	else if (OpName == "Revert")
 	{
@@ -539,6 +648,9 @@ bool FUnrealGitSourceControlProvider::CanExecuteOperation(const FSourceControlOp
 		|| OpName == "Connect"
 		|| OpName == "CheckOut"
 		|| OpName == "MarkForAdd"
+		|| OpName == "Delete"
+		|| OpName == "Copy"
+		|| OpName == "Resolve"
 		|| OpName == "Revert"
 		|| OpName == "CheckIn"
 		|| OpName == "Sync"
@@ -565,7 +677,8 @@ TArray<TSharedRef<ISourceControlLabel>> FUnrealGitSourceControlProvider::GetLabe
 
 bool FUnrealGitSourceControlProvider::UsesLocalReadOnlyState() const
 {
-	return true;
+	// Git does not use OS read-only flags; CheckOut only clears them defensively for LFS workflows.
+	return false;
 }
 
 TArray<FSourceControlChangelistRef> FUnrealGitSourceControlProvider::GetChangelists(EStateCacheUsage::Type /*InStateCacheUsage*/)
@@ -580,7 +693,8 @@ bool FUnrealGitSourceControlProvider::UsesChangelists() const
 
 bool FUnrealGitSourceControlProvider::UsesUncontrolledChangelists() const
 {
-	return false;
+	// Untracked assets must be visible in the Submit Content dialog.
+	return true;
 }
 
 bool FUnrealGitSourceControlProvider::UsesCheckout() const
@@ -616,6 +730,207 @@ TOptional<bool> FUnrealGitSourceControlProvider::HasChangesToSync() const
 TOptional<bool> FUnrealGitSourceControlProvider::HasChangesToCheckIn() const
 {
 	return TOptional<bool>();
+}
+
+FString FUnrealGitSourceControlProvider::GetGitExecutablePath() const
+{
+	return Settings.GitExecutable;
+}
+
+FGitEnvironmentInfo FUnrealGitSourceControlProvider::GetEnvironmentInfo() const
+{
+	FScopeLock Scope(&EnvironmentLock);
+	return EnvironmentInfo.IsSet() ? EnvironmentInfo.GetValue() : FGitEnvironmentInfo();
+}
+
+FString FUnrealGitSourceControlProvider::GetRepositoryRoot() const
+{
+	return RepoRoot;
+}
+
+FString FUnrealGitSourceControlProvider::GetBranchName() const
+{
+	FScopeLock Scope(&EnvironmentLock);
+	return EnvironmentInfo.IsSet() ? EnvironmentInfo->BranchName : FString();
+}
+
+FString FUnrealGitSourceControlProvider::GetRemoteUrl() const
+{
+	FScopeLock Scope(&EnvironmentLock);
+	return EnvironmentInfo.IsSet() ? EnvironmentInfo->RemoteUrl : FString();
+}
+
+FText FUnrealGitSourceControlProvider::GetLastError() const
+{
+	return LastErrorText;
+}
+
+bool FUnrealGitSourceControlProvider::IsGitToolAvailable() const
+{
+	return bGitAvailable;
+}
+
+bool FUnrealGitSourceControlProvider::HasGitRepository() const
+{
+	return bRepositoryFound;
+}
+
+bool FUnrealGitSourceControlProvider::SetGitExecutableOverride(const FString& InExecutablePath, FText& OutError)
+{
+	OutError = FText::GetEmpty();
+
+	const FString TrimmedPath = InExecutablePath.TrimStartAndEnd();
+	if (!TrimmedPath.IsEmpty() && !FPaths::IsRelative(TrimmedPath) && !IFileManager::Get().FileExists(*TrimmedPath))
+	{
+		OutError = FText::FromString(FString::Printf(TEXT("Git executable not found: %s"), *TrimmedPath));
+		return false;
+	}
+
+	UUnrealGitUserSettings* UserSettings = GetMutableDefault<UUnrealGitUserSettings>();
+	if (!UserSettings)
+	{
+		OutError = FText::FromString(TEXT("UnrealGit user settings are unavailable."));
+		return false;
+	}
+
+	UserSettings->GitExecutableOverride.FilePath = TrimmedPath;
+	UserSettings->SaveConfig();
+
+	RefreshRepositoryState();
+	return true;
+}
+
+void FUnrealGitSourceControlProvider::RefreshRepositoryState()
+{
+	LastErrorText = FText::GetEmpty();
+
+	FText SettingsError;
+	if (!FUnrealGitSettingsResolver::Build(Settings, SettingsError))
+	{
+		LastErrorText = SettingsError;
+		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Settings resolver failed: %s"), *SettingsError.ToString());
+		Settings = FUnrealGitProviderSettings();
+		Settings.GitExecutable = TEXT("git");
+		Settings.RepositoryDiscoveryDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
+	}
+
+	ProcessRunner = MakeShared<FSystemGitProcessRunner, ESPMode::ThreadSafe>(Settings.GitExecutable);
+
+	RepoRoot = FindRepositoryRootPath(GetWorkingDirectoryHint());
+	bRepositoryFound = !RepoRoot.IsEmpty();
+	NextLfsLocksRefreshUtc = FDateTime(0);
+
+	StartEnvironmentValidation();
+	if (EnvironmentFuture.IsValid())
+	{
+		const double SyncTimeoutSeconds = FSystemGitProcessRunner::DefaultTimeoutSeconds;
+		if (EnvironmentFuture.WaitFor(FTimespan::FromSeconds(SyncTimeoutSeconds)))
+		{
+			const FGitEnvironmentInfo Info = EnvironmentFuture.Get();
+			{
+				FScopeLock Scope(&EnvironmentLock);
+				EnvironmentInfo = Info;
+			}
+			bGitAvailable = Info.bGitAvailable;
+		}
+		else
+		{
+			UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: Environment validation timed out after %f seconds"), SyncTimeoutSeconds);
+		}
+		EnvironmentFuture = TFuture<FGitEnvironmentInfo>();
+	}
+
+	if (bRepositoryFound)
+	{
+		Execute(ISourceControlOperation::Create<FUpdateStatus>(), nullptr, TArray<FString>(), EConcurrency::Asynchronous, FSourceControlOperationComplete());
+	}
+	else
+	{
+		FScopeLock Lock(&StateCacheLock);
+		StateCache.Reset();
+	}
+}
+
+bool FUnrealGitSourceControlProvider::InitializeRepository(const FString& OriginUrl, bool /*bWriteGitIgnore*/, bool /*bWriteReadme*/, bool /*bWriteGitAttributes*/, bool bCreateInitialCommit, FText& OutError)
+{
+	OutError = FText::GetEmpty();
+
+	if (!ProcessRunner.IsValid())
+	{
+		OutError = FText::FromString(TEXT("UnrealGit process runner not initialized."));
+		return false;
+	}
+
+	const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe> Runner = ProcessRunner.ToSharedRef();
+	const FString WorkingDir = GetWorkingDirectoryHint();
+	const FString TrimmedOriginUrl = OriginUrl.TrimStartAndEnd();
+
+	TFuture<FString> Future = Async(EAsyncExecution::ThreadPool, [Runner, WorkingDir, TrimmedOriginUrl, bCreateInitialCommit]()
+	{
+		auto RunGit = [&Runner, &WorkingDir](const TArray<FString>& Arguments) -> FGitProcessResult
+		{
+			FGitProcessRequest Request;
+			Request.WorkingDirectory = WorkingDir;
+			Request.Arguments = Arguments;
+			return Runner->Run(Request);
+		};
+
+		auto ToError = [](const FGitProcessResult& Result)
+		{
+			const FString StdErr = UnrealGit::Workers::BytesToTextUtf8Lossy(Result.StdErr).TrimStartAndEnd();
+			return StdErr.IsEmpty()
+				? FString::Printf(TEXT("git exited with code %d."), Result.ExitCode)
+				: StdErr;
+		};
+
+		const FGitProcessResult InitResult = RunGit({ TEXT("init") });
+		if (InitResult.ExitCode != 0)
+		{
+			return ToError(InitResult);
+		}
+
+		if (!TrimmedOriginUrl.IsEmpty())
+		{
+			const FGitProcessResult RemoteResult = RunGit({ TEXT("remote"), TEXT("add"), TEXT("origin"), TrimmedOriginUrl });
+			if (RemoteResult.ExitCode != 0)
+			{
+				const FString RemoteError = ToError(RemoteResult);
+				if (!RemoteError.Contains(TEXT("already exists")))
+				{
+					return RemoteError;
+				}
+			}
+		}
+
+		if (bCreateInitialCommit)
+		{
+			const FGitProcessResult AddResult = RunGit({ TEXT("add"), TEXT("-A") });
+			if (AddResult.ExitCode != 0)
+			{
+				return ToError(AddResult);
+			}
+
+			const FGitProcessResult CommitResult = RunGit({ TEXT("commit"), TEXT("-m"), TEXT("Initial commit") });
+			if (CommitResult.ExitCode != 0)
+			{
+				return ToError(CommitResult);
+			}
+		}
+
+		return FString();
+	});
+
+	const FString Error = Future.Get();
+	if (!Error.IsEmpty())
+	{
+		LastErrorText = FText::FromString(Error);
+		OutError = LastErrorText;
+		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Repository initialization failed: %s"), *Error);
+		return false;
+	}
+
+	RefreshRepositoryState();
+	return true;
 }
 
 void FUnrealGitSourceControlProvider::UpdateStatesFromStatusSnapshot(const FGitStatusSnapshot& Snapshot, const TArray<FString>& RequestedFiles)
@@ -703,6 +1018,20 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 	if (Output.RepoRoot.IsSet())
 	{
 		RepoRoot = Output.RepoRoot.GetValue();
+		bRepositoryFound = !RepoRoot.IsEmpty();
+	}
+
+	if (Output.bSuccess && Output.StatusSnapshot.IsSet())
+	{
+		const FGitBranchStatus& BranchStatus = Output.StatusSnapshot.GetValue().Branch;
+		if (!BranchStatus.Head.IsEmpty())
+		{
+			FScopeLock Scope(&EnvironmentLock);
+			if (EnvironmentInfo.IsSet())
+			{
+				EnvironmentInfo->BranchName = BranchStatus.Head;
+			}
+		}
 	}
 
 	if (Output.bSuccess && Output.StatusSnapshot.IsSet())
@@ -716,6 +1045,11 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 	{
 		LastErrorText = Output.ErrorText;
 		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Operation %s failed: %s"), *OperationName, *LastErrorText.ToString());
+
+		if (OperationName == TEXT("Connect"))
+		{
+			StaticCastSharedRef<FConnect>(Operation)->SetErrorText(LastErrorText);
+		}
 
 		const FString ErrorStr = LastErrorText.ToString();
 		if (ErrorStr.Contains(TEXT("index file smaller than expected")) || ErrorStr.Contains(TEXT("index file corrupt")))
@@ -763,6 +1097,17 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 
 			const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
 			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetHistory(Revisions);
+
+			// Link rename/copy revisions to the revision they branched from.
+			for (int32 Index = 0; Index < Revisions.Num(); ++Index)
+			{
+				const TSharedRef<ISourceControlRevision, ESPMode::ThreadSafe>& Revision = Revisions[Index];
+				if (Revision->GetAction() == TEXT("branch") && Revisions.IsValidIndex(Index + 1))
+				{
+					StaticCastSharedRef<FUnrealGitSourceControlRevision>(Revision)->SetBranchSource(Revisions[Index + 1]);
+				}
+			}
+
 			bAnyStateChanged = true;
 		}
 	}
@@ -793,6 +1138,7 @@ void FUnrealGitSourceControlProvider::Tick()
 			FScopeLock Scope(&EnvironmentLock);
 			EnvironmentInfo = Info;
 		}
+		bGitAvailable = Info.bGitAvailable;
 		UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Environment: GitAvailable=%s GitVersion=\"%s\" LfsAvailable=%s LfsVersion=\"%s\" User=\"%s\" Email=\"%s\""),
 			Info.bGitAvailable ? TEXT("true") : TEXT("false"),
 			*Info.GitVersion,
@@ -827,6 +1173,6 @@ void FUnrealGitSourceControlProvider::Tick()
 #if SOURCE_CONTROL_WITH_SLATE
 TSharedRef<SWidget> FUnrealGitSourceControlProvider::MakeSettingsWidget() const
 {
-	return SNullWidget::NullWidget;
+	return SNew(SUnrealGitSettingsWidget).Provider(const_cast<FUnrealGitSourceControlProvider*>(this));
 }
 #endif // SOURCE_CONTROL_WITH_SLATE

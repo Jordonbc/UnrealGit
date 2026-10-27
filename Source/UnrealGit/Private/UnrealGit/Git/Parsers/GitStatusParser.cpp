@@ -250,3 +250,89 @@ bool FGitStatusParser::ParsePorcelainV2Z(const TArray<uint8>& StdOut, FGitStatus
 	return true;
 }
 
+bool FGitStatusParser::ParseUnmergedZ(const TArray<uint8>& StdOut, TMap<FString, FGitResolveInfo>& OutResolveInfo, FString& OutError)
+{
+	OutResolveInfo.Reset();
+	OutError.Reset();
+
+	if (StdOut.Num() == 0)
+	{
+		return true;
+	}
+
+	UnrealGit::Parsing::FNullSeparatedReader Reader(StdOut);
+	TArrayView<const uint8> Token;
+
+	bool bSawToken = false;
+	bool bSawValid = false;
+
+	while (Reader.ReadNext(Token))
+	{
+		if (Token.Num() == 0)
+		{
+			continue;
+		}
+
+		bSawToken = true;
+
+		const FString Record = UnrealGit::Parsing::Utf8BytesToString(Token.GetData(), Token.Num());
+
+		FString LeftPart;
+		FString Path;
+		if (!Record.Split(TEXT("\t"), &LeftPart, &Path))
+		{
+			continue;
+		}
+
+		if (Path.IsEmpty())
+		{
+			continue;
+		}
+
+		TArray<FString> Fields;
+		LeftPart.ParseIntoArrayWS(Fields);
+		if (Fields.Num() != 3)
+		{
+			continue;
+		}
+
+		const FString& Sha = Fields[1];
+		int32 Stage = 0;
+		if (!LexTryParseString(Stage, *Fields[2]))
+		{
+			continue;
+		}
+
+		if (Stage != 1 && Stage != 3)
+		{
+			continue;
+		}
+
+		if (Sha.IsEmpty())
+		{
+			continue;
+		}
+
+		FGitResolveInfo& Info = OutResolveInfo.FindOrAdd(Path);
+		if (Stage == 1)
+		{
+			Info.BaseFile = Path;
+			Info.BaseRevision = Sha;
+		}
+		else
+		{
+			Info.RemoteFile = Path;
+			Info.RemoteRevision = Sha;
+		}
+
+		bSawValid = true;
+	}
+
+	if (bSawToken && !bSawValid)
+	{
+		OutError = TEXT("Failed to parse git ls-files --unmerged output.");
+		return false;
+	}
+
+	return true;
+}

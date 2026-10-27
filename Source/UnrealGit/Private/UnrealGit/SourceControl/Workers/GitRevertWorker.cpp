@@ -30,33 +30,52 @@ void FGitRevertWorker::Execute(
 		return;
 	}
 
-	FGitProcessRequest RestoreRequest;
-	RestoreRequest.WorkingDirectory = FString();
-	RestoreRequest.RepoRoot = RepoRoot;
-	RestoreRequest.Arguments = { TEXT("restore"), TEXT("--worktree") };
-
-	for (const FString& AbsolutePath : Files)
+	if (Files.Num() == 0)
 	{
-		FString Relative;
-		if (!UnrealGit::Workers::TryMakeRepoRelativePath(RepoRoot, AbsolutePath, Relative))
+		FGitProcessRequest RestoreRequest;
+		RestoreRequest.WorkingDirectory = FString();
+		RestoreRequest.RepoRoot = RepoRoot;
+		RestoreRequest.Arguments = {
+			TEXT("restore"),
+			TEXT("--source=HEAD"),
+			TEXT("--staged"),
+			TEXT("--worktree"),
+			TEXT("--ignore-unmatch"),
+			TEXT("--"),
+			TEXT(".")
+		};
+
+		const FGitProcessResult RestoreResult = ProcessRunner->Run(RestoreRequest);
+		if (RestoreResult.ExitCode != 0)
 		{
 			OutOutput.bSuccess = false;
-			OutOutput.ErrorText = FText::FromString(TEXT("File is outside the Git repository root."));
+			OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(RestoreResult.StdErr));
 			return;
 		}
-		if (RestoreRequest.Arguments.Num() == 2)
-		{
-			RestoreRequest.Arguments.Add(TEXT("--"));
-		}
-		RestoreRequest.Arguments.Add(Relative);
 	}
-
-	const FGitProcessResult RestoreResult = ProcessRunner->Run(RestoreRequest);
-	if (RestoreResult.ExitCode != 0)
+	else
 	{
-		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(RestoreResult.StdErr));
-		return;
+		TArray<FString> RelativePaths;
+		FString ConvertError;
+		if (!UnrealGit::Workers::TryMakeRepoRelativePaths(RepoRoot, Files, RelativePaths, ConvertError))
+		{
+			OutOutput.bSuccess = false;
+			OutOutput.ErrorText = FText::FromString(ConvertError.IsEmpty() ? TEXT("File is outside the Git repository root.") : ConvertError);
+			return;
+		}
+
+		FString RestoreError;
+		if (!UnrealGit::Workers::RunGitWithBatchedPaths(
+			ProcessRunner,
+			RepoRoot,
+			{ TEXT("restore"), TEXT("--source=HEAD"), TEXT("--staged"), TEXT("--worktree"), TEXT("--ignore-unmatch") },
+			RelativePaths,
+			RestoreError))
+		{
+			OutOutput.bSuccess = false;
+			OutOutput.ErrorText = FText::FromString(RestoreError);
+			return;
+		}
 	}
 
 	OutOutput.bSuccess = true;

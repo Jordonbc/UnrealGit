@@ -47,6 +47,9 @@ public:
 	virtual bool GetAnnotated(FString& InOutFilename) const override;
 	virtual bool GetAnnotated(TArray<FAnnotationLine>& OutLines) const override;
 
+	/** Links this revision to the revision it was branched/copied from (history metadata). */
+	void SetBranchSource(TSharedPtr<class ISourceControlRevision, ESPMode::ThreadSafe> InBranchSource);
+
 private:
 	struct FMaterializationTask final
 	{
@@ -72,6 +75,5 @@ private:
 	mutable TSharedPtr<FMaterializationTask, ESPMode::ThreadSafe> Task;
 	mutable TOptional<FString> CachedMaterializedFilename;
 
-	mutable FString CachedAction;
-	mutable FString CachedClientSpec;
+	TSharedPtr<class ISourceControlRevision, ESPMode::ThreadSafe> BranchSource;
 };

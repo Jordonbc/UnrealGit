@@ -33,6 +33,8 @@ public:
 
 	virtual TSharedPtr<class ISourceControlRevision, ESPMode::ThreadSafe> GetCurrentRevision() const override;
 
+	virtual FResolveInfo GetResolveInfo() const override;
+
 #if SOURCE_CONTROL_WITH_SLATE
 	virtual FSlateIcon GetIcon() const override;
 #endif // SOURCE_CONTROL_WITH_SLATE
@@ -74,6 +76,7 @@ private:
 	bool bIsUnstaged = false;
 	bool bIsTracked = false;
 	bool bIsConflicted = false;
+	TOptional<FGitResolveInfo> ResolveInfo;
 
 	EGitLockState LockState = EGitLockState::Unknown;
 	FString LockOwner;

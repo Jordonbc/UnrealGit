@@ -43,41 +43,24 @@ void FGitCheckInWorker::Execute(
 		return;
 	}
 
-	FGitProcessRequest AddRequest;
-	AddRequest.WorkingDirectory = FString();
-	AddRequest.RepoRoot = RepoRoot;
-	AddRequest.Arguments = {
-		TEXT("add"),
-		TEXT("-A"),
-		TEXT("--")
-	};
-
-	for (const FString& AbsolutePath : Files)
+	TArray<FString> RelativePaths;
+	FString ConvertError;
+	if (Files.Num() > 0)
 	{
-		FString Relative;
-		if (!UnrealGit::Workers::TryMakeRepoRelativePath(RepoRoot, AbsolutePath, Relative))
+		if (!UnrealGit::Workers::TryMakeRepoRelativePaths(RepoRoot, Files, RelativePaths, ConvertError))
 		{
 			OutOutput.bSuccess = false;
-			OutOutput.ErrorText = FText::FromString(TEXT("File is outside the Git repository root."));
+			OutOutput.ErrorText = FText::FromString(ConvertError.IsEmpty() ? TEXT("File is outside the Git repository root.") : ConvertError);
 			return;
 		}
-		AddRequest.Arguments.Add(Relative);
-	}
 
-	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("CheckIn: Running git add with WorkingDirectory='%s', args='%s'"), 
-		*AddRequest.WorkingDirectory, *FString::Join(AddRequest.Arguments, TEXT(" ")));
-
-	const FGitProcessResult AddResult = ProcessRunner->Run(AddRequest);
-	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("CheckIn: git add result: exit=%d, stdout='%s', stderr='%s'"), 
-		AddResult.ExitCode, 
-		*UnrealGit::Workers::BytesToTextUtf8Lossy(AddResult.StdOut).Left(200),
-		*UnrealGit::Workers::BytesToTextUtf8Lossy(AddResult.StdErr).Left(200));
-
-	if (AddResult.ExitCode != 0)
-	{
-		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(AddResult.StdErr));
-		return;
+		FString AddError;
+		if (!UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, { TEXT("add"), TEXT("-A") }, RelativePaths, AddError))
+		{
+			OutOutput.bSuccess = false;
+			OutOutput.ErrorText = FText::FromString(AddError);
+			return;
+		}
 	}
 
 	const FString TempDir = FPaths::Combine(FPaths::ProjectIntermediateDir(), TEXT("UnrealGit"));
@@ -104,24 +87,77 @@ void FGitCheckInWorker::Execute(
 		IFileManager::Get().Delete(*MessageFile, false, true, true);
 	};
 
-	FGitProcessRequest CommitRequest;
-	CommitRequest.WorkingDirectory = FString();
-	CommitRequest.RepoRoot = RepoRoot;
-	CommitRequest.Arguments = { TEXT("commit"), TEXT("-F"), MessageFile };
-
-	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("CheckIn: Running git commit with message file: %s"), *MessageFile);
-
-	const FGitProcessResult CommitResult = ProcessRunner->Run(CommitRequest);
-	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("CheckIn: git commit result: exit=%d, stdout='%s', stderr='%s'"), 
-		CommitResult.ExitCode, 
-		*UnrealGit::Workers::BytesToTextUtf8Lossy(CommitResult.StdOut).Left(200),
-		*UnrealGit::Workers::BytesToTextUtf8Lossy(CommitResult.StdErr).Left(200));
-
-	if (CommitResult.ExitCode != 0)
+	if (RelativePaths.Num() == 0)
 	{
-		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(CommitResult.StdErr));
-		return;
+		FGitProcessRequest CommitRequest;
+		CommitRequest.WorkingDirectory = FString();
+		CommitRequest.RepoRoot = RepoRoot;
+		CommitRequest.Arguments = { TEXT("commit"), TEXT("-F"), MessageFile };
+
+		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("CheckIn: Running git commit with message file: %s"), *MessageFile);
+
+		const FGitProcessResult CommitResult = ProcessRunner->Run(CommitRequest);
+		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("CheckIn: git commit result: exit=%d, stdout='%s', stderr='%s'"),
+			CommitResult.ExitCode,
+			*UnrealGit::Workers::BytesToTextUtf8Lossy(CommitResult.StdOut).Left(200),
+			*UnrealGit::Workers::BytesToTextUtf8Lossy(CommitResult.StdErr).Left(200));
+
+		if (CommitResult.ExitCode != 0)
+		{
+			OutOutput.bSuccess = false;
+			OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(CommitResult.StdErr));
+			return;
+		}
+	}
+	else
+	{
+		bool bFirstBatch = true;
+		bool bCommitSucceeded = true;
+		FString CommitError;
+
+		UnrealGit::Workers::ForEachPathBatch(RelativePaths, UnrealGit::Workers::MaxFilesPerCommand, [&](const TArray<FString>& Batch)
+		{
+			if (!bCommitSucceeded)
+			{
+				return;
+			}
+
+			FGitProcessRequest CommitRequest;
+			CommitRequest.WorkingDirectory = FString();
+			CommitRequest.RepoRoot = RepoRoot;
+
+			if (bFirstBatch)
+			{
+				CommitRequest.Arguments = { TEXT("commit"), TEXT("-F"), MessageFile, TEXT("--") };
+				bFirstBatch = false;
+			}
+			else
+			{
+				CommitRequest.Arguments = { TEXT("commit"), TEXT("--amend"), TEXT("-F"), MessageFile, TEXT("--") };
+			}
+			CommitRequest.Arguments.Append(Batch);
+
+			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("CheckIn: Running git commit with message file: %s"), *MessageFile);
+
+			const FGitProcessResult CommitResult = ProcessRunner->Run(CommitRequest);
+			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("CheckIn: git commit result: exit=%d, stdout='%s', stderr='%s'"),
+				CommitResult.ExitCode,
+				*UnrealGit::Workers::BytesToTextUtf8Lossy(CommitResult.StdOut).Left(200),
+				*UnrealGit::Workers::BytesToTextUtf8Lossy(CommitResult.StdErr).Left(200));
+
+			if (CommitResult.ExitCode != 0)
+			{
+				bCommitSucceeded = false;
+				CommitError = UnrealGit::Workers::BytesToTextUtf8Lossy(CommitResult.StdErr);
+			}
+		});
+
+		if (!bCommitSucceeded)
+		{
+			OutOutput.bSuccess = false;
+			OutOutput.ErrorText = FText::FromString(CommitError);
+			return;
+		}
 	}
 
 	OutOutput.bSuccess = true;

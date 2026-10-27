@@ -37,23 +37,12 @@ void FGitUpdateStatusWorker::Execute(
 		return;
 	}
 
-	FGitProcessRequest StatusRequest;
-	StatusRequest.WorkingDirectory = FString();
-	StatusRequest.RepoRoot = RepoRoot;
-	StatusRequest.Arguments = {
-		TEXT("status"),
-		TEXT("--porcelain=v2"),
-		TEXT("-z"),
-		TEXT("--branch"),
-		TEXT("--untracked-files=all"),
-		TEXT("--ignored=matching"),
-	};
-
 	// Use pathspecs when specific files are requested to reduce work.
 	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Received Files.Num()=%d"), Files.Num());
+
+	TArray<FString> RepoRelativePaths;
 	if (Files.Num() > 0)
 	{
-		TArray<FString> RepoRelativePaths;
 		RepoRelativePaths.Reserve(Files.Num());
 
 		for (const FString& FilePath : Files)
@@ -66,37 +55,99 @@ void FGitUpdateStatusWorker::Execute(
 		}
 
 		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Converted to %d relative paths"), RepoRelativePaths.Num());
-
-		if (RepoRelativePaths.Num() > 0)
-		{
-			StatusRequest.Arguments.Add(TEXT("--"));
-			for (const FString& Relative : RepoRelativePaths)
-			{
-				StatusRequest.Arguments.Add(Relative);
-			}
-		}
-	}
-
-	const FGitProcessResult StatusResult = ProcessRunner->Run(StatusRequest);
-	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: git status result: exit=%d, stdout_len=%d, stdout='%s', stderr='%s'"), 
-		StatusResult.ExitCode, StatusResult.StdOut.Num(), 
-		*UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdOut).Left(500),
-		*UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdErr));
-	if (StatusResult.ExitCode != 0)
-	{
-		OutOutput.bSuccess = false;
-		const FString StdErr = UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdErr).TrimStartAndEnd();
-		const FString StdOut = UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdOut).TrimStartAndEnd();
-		OutOutput.ErrorText = FText::FromString(!StdErr.IsEmpty() ? StdErr : StdOut);
-		return;
 	}
 
 	FGitStatusSnapshot Snapshot;
 	FString ParseError;
-	if (!FGitStatusParser::ParsePorcelainV2Z(StatusResult.StdOut, Snapshot, ParseError))
+
+	const auto BaseStatusArguments = []() {
+		return TArray<FString>{
+			TEXT("status"),
+			TEXT("--porcelain=v2"),
+			TEXT("-z"),
+			TEXT("--branch"),
+			TEXT("--untracked-files=all"),
+			TEXT("--ignored=matching"),
+		};
+	};
+
+	bool bStatusOk = true;
+	FString StatusErrorText;
+	bool bBranchSet = false;
+
+	auto RunStatusBatch = [&](const TArray<FString>& BatchPaths)
+	{
+		if (!bStatusOk)
+		{
+			return;
+		}
+
+		FGitProcessRequest StatusRequest;
+		StatusRequest.WorkingDirectory = FString();
+		StatusRequest.RepoRoot = RepoRoot;
+		StatusRequest.Arguments = BaseStatusArguments();
+
+		if (BatchPaths.Num() > 0)
+		{
+			StatusRequest.Arguments.Add(TEXT("--"));
+			for (const FString& Relative : BatchPaths)
+			{
+				StatusRequest.Arguments.Add(Relative);
+			}
+		}
+
+		const FGitProcessResult StatusResult = ProcessRunner->Run(StatusRequest);
+		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: git status result: exit=%d, stdout_len=%d, stdout='%s', stderr='%s'"),
+			StatusResult.ExitCode, StatusResult.StdOut.Num(),
+			*UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdOut).Left(500),
+			*UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdErr));
+		if (StatusResult.ExitCode != 0)
+		{
+			bStatusOk = false;
+			const FString StdErr = UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdErr).TrimStartAndEnd();
+			const FString StdOut = UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdOut).TrimStartAndEnd();
+			StatusErrorText = !StdErr.IsEmpty() ? StdErr : StdOut;
+			return;
+		}
+
+		FGitStatusSnapshot BatchSnapshot;
+		FString BatchParseError;
+		if (!FGitStatusParser::ParsePorcelainV2Z(StatusResult.StdOut, BatchSnapshot, BatchParseError))
+		{
+			bStatusOk = false;
+			StatusErrorText = BatchParseError;
+			return;
+		}
+
+		if (!bBranchSet)
+		{
+			Snapshot.Branch = BatchSnapshot.Branch;
+			bBranchSet = true;
+		}
+
+		for (FGitFileStatus& FileStatus : BatchSnapshot.Files)
+		{
+			Snapshot.Files.Add(MoveTemp(FileStatus));
+		}
+	};
+
+	if (RepoRelativePaths.Num() > 0)
+	{
+		UnrealGit::Workers::ForEachPathBatch(RepoRelativePaths, UnrealGit::Workers::MaxFilesPerCommand, [&](const TArray<FString>& Batch)
+		{
+			RunStatusBatch(Batch);
+		});
+	}
+	else
+	{
+		TArray<FString> EmptyBatch;
+		RunStatusBatch(EmptyBatch);
+	}
+
+	if (!bStatusOk)
 	{
 		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(ParseError);
+		OutOutput.ErrorText = FText::FromString(StatusErrorText);
 		return;
 	}
 
@@ -220,6 +271,64 @@ void FGitUpdateStatusWorker::Execute(
 		{
 			UE_LOG(LogUnrealGit, Warning, TEXT("UpdateStatus: git ls-files failed with exit code %d"), LsFilesResult.ExitCode);
 		}
+	}
+
+	// Attach merge (resolve) data to conflicted files using `git ls-files --unmerged`.
+	TSet<FString> ConflictedPathSet;
+	for (const FGitFileStatus& FileStatus : Snapshot.Files)
+	{
+		if (FileStatus.bIsConflicted || FileStatus.State == EGitFileState::Conflicted)
+		{
+			ConflictedPathSet.Add(FileStatus.RelativePath);
+		}
+	}
+
+	TArray<FString> ConflictedPaths = ConflictedPathSet.Array();
+	if (ConflictedPaths.Num() > 0)
+	{
+		UnrealGit::Workers::ForEachPathBatch(ConflictedPaths, 50, [&](const TArray<FString>& Batch)
+		{
+			FGitProcessRequest UnmergedRequest;
+			UnmergedRequest.WorkingDirectory = FString();
+			UnmergedRequest.RepoRoot = RepoRoot;
+			UnmergedRequest.Arguments = {
+				TEXT("ls-files"),
+				TEXT("--unmerged"),
+				TEXT("-z"),
+			};
+			UnmergedRequest.Arguments.Add(TEXT("--"));
+			for (const FString& Relative : Batch)
+			{
+				UnmergedRequest.Arguments.Add(Relative);
+			}
+
+			const FGitProcessResult UnmergedResult = ProcessRunner->Run(UnmergedRequest);
+			if (UnmergedResult.ExitCode != 0)
+			{
+				UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: git ls-files --unmerged failed with exit code %d"), UnmergedResult.ExitCode);
+				return;
+			}
+
+			TMap<FString, FGitResolveInfo> ResolveInfoMap;
+			FString UnmergedError;
+			if (!FGitStatusParser::ParseUnmergedZ(UnmergedResult.StdOut, ResolveInfoMap, UnmergedError))
+			{
+				UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Failed to parse unmerged output: %s"), *UnmergedError);
+				return;
+			}
+
+			for (const auto& Pair : ResolveInfoMap)
+			{
+				for (FGitFileStatus& Status : Snapshot.Files)
+				{
+					if (Status.RelativePath == Pair.Key)
+					{
+						Status.ResolveInfo = Pair.Value;
+						break;
+					}
+				}
+			}
+		});
 	}
 
 	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Final snapshot has %d files"), Snapshot.Files.Num());

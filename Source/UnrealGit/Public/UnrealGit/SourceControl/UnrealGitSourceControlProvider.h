@@ -73,9 +73,44 @@ public:
 	virtual TSharedRef<class SWidget> MakeSettingsWidget() const override;
 #endif // SOURCE_CONTROL_WITH_SLATE
 
+	// ---------------------------------------------------------------------
+	// Settings widget support
+	// ---------------------------------------------------------------------
+
+	/** Resolved git executable (user override or detected install). */
+	FString GetGitExecutablePath() const;
+
+	/** Snapshot copy of the last environment validation result. */
+	FGitEnvironmentInfo GetEnvironmentInfo() const;
+
+	/** Absolute repository root, or an empty string when no repository was found. */
+	FString GetRepositoryRoot() const;
+
+	FString GetBranchName() const;
+	FString GetRemoteUrl() const;
+	FText GetLastError() const;
+
+	/** True when git itself was found and validated. */
+	bool IsGitToolAvailable() const;
+
+	/** True when a .git directory/file was found at or above the repository discovery directory. */
+	bool HasGitRepository() const;
+
+	/** Persists the git executable override to user settings and reinitializes discovery. */
+	bool SetGitExecutableOverride(const FString& InExecutablePath, FText& OutError);
+
+	/**
+	 * Initializes a git repository in the repository discovery directory.
+	 *
+	 * Blocking: runs git on a worker thread internally. Call from the game thread
+	 * (the settings widget does), not from another worker.
+	 */
+	bool InitializeRepository(const FString& OriginUrl, bool bWriteGitIgnore, bool bWriteReadme, bool bWriteGitAttributes, bool bCreateInitialCommit, FText& OutError);
+
 private:
 	struct FCommand;
 
+	void RefreshRepositoryState();
 	void UpdateStatesFromStatusSnapshot(const struct FGitStatusSnapshot& Snapshot, const TArray<FString>& RequestedFiles);
 	void ApplyLfsLocksToStates(const TOptional<struct FGitStatusSnapshot>& Snapshot, const TArray<struct FGitLfsLock>& Locks);
 	void ReconcileWorkerOutput(const FSourceControlOperationRef& Operation, const TArray<FString>& Files, const FSourceControlOperationComplete& Delegate, const struct FUnrealGitWorkerOutput& Output);
@@ -96,6 +131,9 @@ private:
 	FString RepoRoot;
 	FText LastErrorText;
 	FUnrealGitProviderSettings Settings;
+
+	bool bGitAvailable = true;
+	bool bRepositoryFound = false;
 
 	TSharedPtr<IGitProcessRunner, ESPMode::ThreadSafe> ProcessRunner;
 	TSharedPtr<FGitRevisionMaterializer, ESPMode::ThreadSafe> RevisionMaterializer;
