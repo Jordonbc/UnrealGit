@@ -5,9 +5,8 @@
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitStatusParserTest, "UnrealGit.Parsers.StatusPorcelainV2Z", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitStatusParserTest::RunTest(const FString& Parameters)
+bool FUnrealGitStatusParserTest::RunTest(const FString&)
 {
-	(void)Parameters;
 
 	TArray<uint8> Bytes;
 	auto AppendZ = [&Bytes](const FString& S)
@@ -37,22 +36,21 @@ bool FUnrealGitStatusParserTest::RunTest(const FString& Parameters)
 	TestTrue(TEXT("Unstaged"), Modified.bIsUnstaged);
 
 	const FGitFileStatus& Untracked = Snapshot.Files[1];
-	TestEqual(TEXT("Untracked state"), (uint8)Untracked.State, (uint8)EGitFileState::Untracked);
+	TestEqual(TEXT("Untracked state"), static_cast<uint8>(Untracked.State), static_cast<uint8>(EGitFileState::Untracked));
 
 	const FGitFileStatus& UnicodeUntracked = Snapshot.Files[2];
 	TestEqual(TEXT("Unicode untracked path"), UnicodeUntracked.RelativePath, FString(TEXT("Content/路径/文件.txt")));
 
 	const FGitFileStatus& Ignored = Snapshot.Files[3];
-	TestEqual(TEXT("Ignored state"), (uint8)Ignored.State, (uint8)EGitFileState::Ignored);
+	TestEqual(TEXT("Ignored state"), static_cast<uint8>(Ignored.State), static_cast<uint8>(EGitFileState::Ignored));
 
 	return true;
 }
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitStatusParserUnmergedZTest, "UnrealGit.Parsers.StatusUnmergedZ", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitStatusParserUnmergedZTest::RunTest(const FString& Parameters)
+bool FUnrealGitStatusParserUnmergedZTest::RunTest(const FString&)
 {
-	(void)Parameters;
 
 	TArray<uint8> Bytes;
 	auto AppendZ = [&Bytes](const FString& S)
@@ -95,9 +93,8 @@ bool FUnrealGitStatusParserUnmergedZTest::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitStatusParserUnmergedZMalformedTest, "UnrealGit.Parsers.StatusUnmergedZMalformed", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitStatusParserUnmergedZMalformedTest::RunTest(const FString& Parameters)
+bool FUnrealGitStatusParserUnmergedZMalformedTest::RunTest(const FString&)
 {
-	(void)Parameters;
 
 	TArray<uint8> EmptyBytes;
 	TMap<FString, FGitResolveInfo> EmptyMap;
