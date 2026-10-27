@@ -10,6 +10,7 @@
 #include "Misc/Paths.h"
 #include "SourceControlOperations.h"
 #include "UnrealGit/Git/IGitProcessRunner.h"
+#include "UnrealGit.h"
 #include "UnrealGit/Git/GitModels.h"
 #include "UnrealGit/Git/GitRevisionMaterializer.h"
 #include "UnrealGit/Git/Parsers/GitVersionParser.h"
@@ -151,7 +152,7 @@ void FUnrealGitSourceControlProvider::ResolveRuntimeSettings()
 	if (!FUnrealGitSettingsResolver::Build(Settings, SettingsError))
 	{
 		LastErrorText = SettingsError;
-		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Settings resolver failed: %s"), *SettingsError.ToString());
+		UE_LOG(LogUnrealGit, Error, TEXT("UnrealGit: Settings resolver failed: %s"), *SettingsError.ToString());
 		Settings = FUnrealGitProviderSettings();
 		Settings.GitExecutable = TEXT("git");
 		Settings.RepositoryDiscoveryDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
@@ -180,11 +181,11 @@ void FUnrealGitSourceControlProvider::ApplyEnvironmentInfo(const FGitEnvironment
 
 void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
 {
-	UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Init (bForceConnection=%s)"), bForceConnection ? TEXT("true") : TEXT("false"));
+	UE_LOG(LogUnrealGit, Log, TEXT("UnrealGit: Init (bForceConnection=%s)"), bForceConnection ? TEXT("true") : TEXT("false"));
 
 	ResolveRuntimeSettings();
 
-	UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: GitExecutable=\"%s\" RepoDiscoveryDir=\"%s\" EnableLfsLocks=%s"),
+	UE_LOG(LogUnrealGit, Log, TEXT("UnrealGit: GitExecutable=\"%s\" RepoDiscoveryDir=\"%s\" EnableLfsLocks=%s"),
 		*Settings.GitExecutable,
 		*Settings.RepositoryDiscoveryDirectory,
 		Settings.bEnableLfsLocks ? TEXT("true") : TEXT("false"));
@@ -202,7 +203,7 @@ void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
 		{
 			FGitEnvironmentInfo Info = EnvironmentFuture.Get();
 			ApplyEnvironmentInfo(Info);
-			UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Environment: GitAvailable=%s GitVersion=\"%s\" LfsAvailable=%s LfsVersion=\"%s\" User=\"%s\" Email=\"%s\""),
+			UE_LOG(LogUnrealGit, Log, TEXT("UnrealGit: Environment: GitAvailable=%s GitVersion=\"%s\" LfsAvailable=%s LfsVersion=\"%s\" User=\"%s\" Email=\"%s\""),
 				Info.bGitAvailable ? TEXT("true") : TEXT("false"),
 				*Info.GitVersion,
 				Info.bGitLfsAvailable ? TEXT("true") : TEXT("false"),
@@ -212,7 +213,7 @@ void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
 		}
 		else
 		{
-			UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: Environment validation timed out after %f seconds"), SyncTimeoutSeconds);
+			UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: Environment validation timed out after %f seconds"), SyncTimeoutSeconds);
 		}
 		EnvironmentFuture = TFuture<FGitEnvironmentInfo>();
 	}
@@ -580,7 +581,7 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	if (!ProcessRunner.IsValid())
 	{
 		LastErrorText = FText::FromString(TEXT("UnrealGit process runner not initialized."));
-		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Execute(%s) failed: %s"), *OpName.ToString(), *LastErrorText.ToString());
+		UE_LOG(LogUnrealGit, Error, TEXT("UnrealGit: Execute(%s) failed: %s"), *OpName.ToString(), *LastErrorText.ToString());
 		return ECommandResult::Failed;
 	}
 
@@ -633,14 +634,14 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	if (!Worker)
 	{
 		LastErrorText = FText::FromString(FString::Printf(TEXT("Operation not supported: %s"), *OpName.ToString()));
-		UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: %s"), *LastErrorText.ToString());
+		UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: %s"), *LastErrorText.ToString());
 		return ECommandResult::Failed;
 	}
 
 	if (!CanExecuteOperation(InOperation))
 	{
 		LastErrorText = FText::FromString(FString::Printf(TEXT("Operation not supported: %s"), *OpName.ToString()));
-		UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: %s"), *LastErrorText.ToString());
+		UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: %s"), *LastErrorText.ToString());
 		return ECommandResult::Failed;
 	}
 
@@ -694,7 +695,7 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 		});
 		const FUnrealGitWorkerOutput Output = Future.Get();
 		ReconcileWorkerOutput(Command->Operation, Command->Files, Command->Delegate, Output);
-		UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: Executed operation %s synchronously (files=%d, success=%d)"),
+		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UnrealGit: Executed operation %s synchronously (files=%d, success=%d)"),
 			*OpName.ToString(), InFiles.Num(), Output.bSuccess ? 1 : 0);
 		return Output.bSuccess ? ECommandResult::Succeeded : ECommandResult::Failed;
 	}
@@ -711,7 +712,7 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 		Commands.Add(Command);
 	}
 
-	UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: Queued operation %s (files=%d, concurrency=%s)"),
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UnrealGit: Queued operation %s (files=%d, concurrency=%s)"),
 		*OpName.ToString(),
 		InFiles.Num(),
 		InConcurrency == EConcurrency::Synchronous ? TEXT("Sync") : TEXT("Async"));
@@ -893,7 +894,7 @@ void FUnrealGitSourceControlProvider::RefreshRepositoryState()
 		}
 		else
 		{
-			UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: Environment validation timed out after %f seconds"), SyncTimeoutSeconds);
+			UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: Environment validation timed out after %f seconds"), SyncTimeoutSeconds);
 		}
 		EnvironmentFuture = TFuture<FGitEnvironmentInfo>();
 	}
@@ -983,7 +984,7 @@ bool FUnrealGitSourceControlProvider::InitializeRepository(const FString& Origin
 	{
 		LastErrorText = FText::FromString(Error);
 		OutError = LastErrorText;
-		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Repository initialization failed: %s"), *Error);
+		UE_LOG(LogUnrealGit, Error, TEXT("UnrealGit: Repository initialization failed: %s"), *Error);
 		return false;
 	}
 
@@ -1170,7 +1171,7 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 	else if (!Output.bSuccess)
 	{
 		LastErrorText = Output.ErrorText;
-		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Operation %s failed: %s"), *OperationName, *LastErrorText.ToString());
+		UE_LOG(LogUnrealGit, Error, TEXT("UnrealGit: Operation %s failed: %s"), *OperationName, *LastErrorText.ToString());
 
 		if (OperationName == TEXT("CheckOut"))
 		{
@@ -1186,11 +1187,11 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 		const FString ErrorStr = LastErrorText.ToString();
 		if (ErrorStr.Contains(TEXT("index file smaller than expected")) || ErrorStr.Contains(TEXT("index file corrupt")))
 		{
-			UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: Detected corrupted index, attempting auto-recovery..."));
+			UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: Detected corrupted index, attempting auto-recovery..."));
 			if (UnrealGit::Workers::TryFixCorruptedIndex(ProcessRunner, RepoRoot))
 			{
 				LastErrorText = FText::FromString(TEXT("Corrupted index was rebuilt. Please retry the operation."));
-				UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Successfully recovered from corrupted index. User should retry the operation."));
+				UE_LOG(LogUnrealGit, Log, TEXT("UnrealGit: Successfully recovered from corrupted index. User should retry the operation."));
 			}
 		}
 	}
@@ -1335,7 +1336,7 @@ void FUnrealGitSourceControlProvider::Tick()
 	{
 		const FGitEnvironmentInfo Info = EnvironmentFuture.Get();
 		ApplyEnvironmentInfo(Info);
-		UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Environment: GitAvailable=%s GitVersion=\"%s\" LfsAvailable=%s LfsVersion=\"%s\" User=\"%s\" Email=\"%s\""),
+		UE_LOG(LogUnrealGit, Log, TEXT("UnrealGit: Environment: GitAvailable=%s GitVersion=\"%s\" LfsAvailable=%s LfsVersion=\"%s\" User=\"%s\" Email=\"%s\""),
 			Info.bGitAvailable ? TEXT("true") : TEXT("false"),
 			*Info.GitVersion,
 			Info.bGitLfsAvailable ? TEXT("true") : TEXT("false"),
