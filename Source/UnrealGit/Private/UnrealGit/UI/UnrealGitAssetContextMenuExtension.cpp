@@ -118,7 +118,7 @@ static void PopulateRevisionControlSubMenu(UToolMenu* InMenu)
 
 void FUnrealGitAssetContextMenuExtension::Register()
 {
-	UToolMenus* ToolMenus = UToolMenus::Get();
+	UToolMenus* ToolMenus = UToolMenus::TryGet();
 	if (!ToolMenus)
 	{
 		return;
@@ -133,7 +133,7 @@ void FUnrealGitAssetContextMenuExtension::Register()
 
 void FUnrealGitAssetContextMenuExtension::Unregister()
 {
-	UToolMenus* ToolMenus = UToolMenus::Get();
+	UToolMenus* ToolMenus = UToolMenus::TryGet();
 	if (!ToolMenus)
 	{
 		return;
