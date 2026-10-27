@@ -82,6 +82,8 @@ private:
 	TSharedRef<SWidget> BuildHierarchyPanel();
 	/** @return Summary panel widget. */
 	TSharedRef<SWidget> BuildSummaryPanel();
+	/** @return Property-difference inspector panel widget. */
+	TSharedRef<SWidget> BuildPropertyInspector();
 	/** Binds the session's update delegate to the view. */
 	void WireSession();
 
@@ -201,6 +203,14 @@ private:
 	TArray<TSharedPtr<FDiffEntry>> AllDiffEntries;
 	TSharedPtr<STextBlock> DiffSummaryText;
 
+	/** Rows shown in the property-difference inspector for the selected widget. */
+	TArray<TSharedPtr<FUnrealGitPropertyDiff>> InspectorItems;
+	TSharedPtr<SListView<TSharedPtr<FUnrealGitPropertyDiff>>> InspectorList;
+	/** Name of the widget currently shown in the inspector, or empty when nothing is selected. */
+	FString InspectorWidgetName;
+	/** Explanation shown when the inspector has no rows. */
+	FText InspectorEmptyMessage;
+
 	bool bShowAdded = true;
 	bool bShowRemoved = true;
 	bool bShowModified = true;
@@ -238,4 +248,27 @@ private:
 	 * @return Row widget.
 	 */
 	TSharedRef<ITableRow> OnGeneratePropertyRow(TSharedPtr<FDiffEntry> Item, const TSharedRef<STableViewBase>& OwnerTable);
+
+	/**
+	 * Rebuilds the inspector rows for the given node and updates the empty state.
+	 * @param Node Selected node, or null when nothing is selected.
+	 */
+	void RefreshInspector(const FUnrealGitWidgetNode* Node);
+	/** @return Inspector header text for the current selection. */
+	FText GetInspectorHeaderText() const;
+	/** @return Visible when the inspector has rows to display. */
+	EVisibility GetInspectorListVisibility() const;
+	/**
+	 * Generates one inspector row.
+	 * @param Item Difference to render.
+	 * @param OwnerTable Owning table.
+	 * @return Row widget.
+	 */
+	TSharedRef<ITableRow> OnGenerateInspectorRow(TSharedPtr<FUnrealGitPropertyDiff> Item, const TSharedRef<STableViewBase>& OwnerTable);
+	/**
+	 * Opens the copy context menu for a difference row.
+	 * @param Item Difference under the cursor.
+	 * @param ScreenPosition Menu position in screen space.
+	 */
+	void ShowInspectorContextMenu(TSharedPtr<FUnrealGitPropertyDiff> Item, const FVector2D& ScreenPosition);
 };

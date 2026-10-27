@@ -38,6 +38,24 @@ enum class EUnrealGitWidgetChange : uint8
 };
 
 /**
+ * @struct FUnrealGitPropertyDiff
+ * One differing property leaf between the two widget revisions.
+ */
+struct FUnrealGitPropertyDiff
+{
+	/** Dotted path relative to the widget, e.g. "Slot.Padding.Left". */
+	FString Path;
+	/** Grouping label: "Slot", the property's Category metadata, or the owning class name. */
+	FString Category;
+	/** Removed/Added when the property exists on one side only; Modified when its value differs. */
+	EUnrealGitWidgetChange Change = EUnrealGitWidgetChange::Modified;
+	/** Value exported from the historical (left) revision; empty for added properties. */
+	FString Before;
+	/** Value exported from the current (right) revision; empty for removed properties. */
+	FString After;
+};
+
+/**
  * @struct FUnrealGitWidgetNode
  * One row in the read-only widget hierarchy tree.
  */
@@ -53,6 +71,8 @@ struct FUnrealGitWidgetNode
 	int32 ParentIndex = INDEX_NONE;
 	EUnrealGitWidgetChange Change = EUnrealGitWidgetChange::Unchanged;
 	TArray<FString> ChangedProperties;
+	/** Value-level property differences, empty for added/removed or unchanged widgets. */
+	TArray<FUnrealGitPropertyDiff> PropertyDiffs;
 	/** Index into the flattened pre-order array of the left tree, or INDEX_NONE if added. */
 	int32 LeftIndex = INDEX_NONE;
 	/** Index into the flattened pre-order array of the right tree, or INDEX_NONE if removed. */

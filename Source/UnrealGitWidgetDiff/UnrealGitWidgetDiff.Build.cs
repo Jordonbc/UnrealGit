@@ -21,6 +21,7 @@ public class UnrealGitWidgetDiff : ModuleRules
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
+				"ApplicationCore",
 				"AssetTools",
 				"ContentBrowser",
 				"InputCore",

@@ -5,7 +5,7 @@
 #include "Blueprint/WidgetTree.h"
 #include "Components/PanelWidget.h"
 #include "Components/Widget.h"
-#include "DiffUtils.h"
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffPropertyComparer.h"
 #include "WidgetBlueprint.h"
 
 namespace
@@ -141,11 +141,10 @@ TArray<FUnrealGitWidgetNode> FUnrealGitWidgetDiffHierarchy::Build(UWidgetBluepri
 
 			if (LeftWidgets.IsValidIndex(LeftIndex) && RightWidgets.IsValidIndex(RightIndex))
 			{
-				TArray<FSingleObjectDiffEntry> Differences;
-				DiffUtils::CompareUnrelatedObjects(LeftWidgets[LeftIndex], RightWidgets[RightIndex], Differences);
-				for (const FSingleObjectDiffEntry& Difference : Differences)
+				FUnrealGitWidgetDiffPropertyComparer::CompareWidgets(LeftWidgets[LeftIndex], RightWidgets[RightIndex], Node.PropertyDiffs);
+				for (const FUnrealGitPropertyDiff& Difference : Node.PropertyDiffs)
 				{
-					Node.ChangedProperties.Add(Difference.Identifier.ToDisplayName());
+					Node.ChangedProperties.AddUnique(Difference.Path);
 				}
 			}
 
