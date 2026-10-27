@@ -243,12 +243,14 @@ FText FUnrealGitSourceControlProvider::GetStatusText() const
 
 bool FUnrealGitSourceControlProvider::IsEnabled() const
 {
-	return bRepositoryFound;
+	// Keep the provider selectable whenever it initialized: repository detection is
+	// filesystem-based and must never disable the editor's Source Control menu.
+	return ProcessRunner.IsValid();
 }
 
 bool FUnrealGitSourceControlProvider::IsAvailable() const
 {
-	return ProcessRunner.IsValid() && bGitAvailable;
+	return ProcessRunner.IsValid();
 }
 
 TMap<ISourceControlProvider::EStatus, FString> FUnrealGitSourceControlProvider::GetStatus() const
@@ -308,11 +310,6 @@ FSourceControlStateRef FUnrealGitSourceControlProvider::GetOrCreateStateInternal
 
 ECommandResult::Type FUnrealGitSourceControlProvider::GetState(const TArray<FString>& InFiles, TArray<FSourceControlStateRef>& OutState, EStateCacheUsage::Type InStateCacheUsage)
 {
-	if (!IsEnabled())
-	{
-		return ECommandResult::Failed;
-	}
-
 	OutState.Reset();
 	OutState.Reserve(InFiles.Num());
 
@@ -513,13 +510,6 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 		return ECommandResult::Failed;
 	}
 
-	if (!IsEnabled() && OpName != "Connect")
-	{
-		LastErrorText = FText::FromString(TEXT("UnrealGit: not connected to a Git repository."));
-		UE_LOG(LogSourceControl, Warning, TEXT("UnrealGit: Execute(%s) rejected: %s"), *OpName.ToString(), *LastErrorText.ToString());
-		return ECommandResult::Failed;
-	}
-
 	TUniquePtr<IGitSourceControlWorker> Worker;
 	if (OpName == "UpdateStatus" || OpName == "Connect")
 	{
@@ -677,8 +667,9 @@ TArray<TSharedRef<ISourceControlLabel>> FUnrealGitSourceControlProvider::GetLabe
 
 bool FUnrealGitSourceControlProvider::UsesLocalReadOnlyState() const
 {
-	// Git does not use OS read-only flags; CheckOut only clears them defensively for LFS workflows.
-	return false;
+	// The editor uses this to decide whether to drive the check-out/read-only flow.
+	// CheckOut is our hook for LFS lock-on-checkout, so it must remain enabled.
+	return true;
 }
 
 TArray<FSourceControlChangelistRef> FUnrealGitSourceControlProvider::GetChangelists(EStateCacheUsage::Type /*InStateCacheUsage*/)
