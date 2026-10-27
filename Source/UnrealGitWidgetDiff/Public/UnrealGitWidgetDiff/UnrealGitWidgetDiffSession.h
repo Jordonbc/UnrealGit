@@ -68,6 +68,11 @@ public:
 
 	FSimpleMulticastDelegate OnUpdated;
 
+	/** Read-only access to the stored diff result. */
+	const FUnrealGitWidgetDiffResult& GetResult() const { return Result; }
+	/** Read-only access to the stored images. */
+	const UUnrealGitWidgetDiffImages* GetImages() const { return Images.Get(); }
+
 	/**
 	 * Stores the diff result and images and marks the session ready.
 	 * @param InResult Diff result to store.
