@@ -10,7 +10,7 @@
  *
  * This parser is deterministic and side-effect free.
  */
-class FGitVersionParser final
+class UNREALGIT_API FGitVersionParser final
 {
 public:
 	/**
