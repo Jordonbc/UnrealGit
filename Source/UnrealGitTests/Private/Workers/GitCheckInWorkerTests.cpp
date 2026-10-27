@@ -9,9 +9,8 @@
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitCheckInWorkerTest, "UnrealGit.Workers.CheckInSequencing", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitCheckInWorkerTest::RunTest(const FString& Parameters)
+bool FUnrealGitCheckInWorkerTest::RunTest(const FString&)
 {
-	(void)Parameters;
 
 	TSharedRef<FMockGitProcessRunner, ESPMode::ThreadSafe> Runner = MakeShared<FMockGitProcessRunner, ESPMode::ThreadSafe>();
 
@@ -44,9 +43,8 @@ bool FUnrealGitCheckInWorkerTest::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitCheckInWorkerBatch60Test, "UnrealGit.Workers.CheckInBatch60", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitCheckInWorkerBatch60Test::RunTest(const FString& Parameters)
+bool FUnrealGitCheckInWorkerBatch60Test::RunTest(const FString&)
 {
-	(void)Parameters;
 
 	TSharedRef<FMockGitProcessRunner, ESPMode::ThreadSafe> Runner = MakeShared<FMockGitProcessRunner, ESPMode::ThreadSafe>();
 
@@ -105,9 +103,8 @@ bool FUnrealGitCheckInWorkerBatch60Test::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitCheckInWorkerBatch120Test, "UnrealGit.Workers.CheckInBatch120", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitCheckInWorkerBatch120Test::RunTest(const FString& Parameters)
+bool FUnrealGitCheckInWorkerBatch120Test::RunTest(const FString&)
 {
-	(void)Parameters;
 
 	TSharedRef<FMockGitProcessRunner, ESPMode::ThreadSafe> Runner = MakeShared<FMockGitProcessRunner, ESPMode::ThreadSafe>();
 
