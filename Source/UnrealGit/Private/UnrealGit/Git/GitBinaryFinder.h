@@ -15,6 +15,11 @@ namespace UnrealGit::Git
 	/** Returns the first existing executable from the platform candidate list, or "git" when none matched. */
 	FString FindGitBinary();
 
-	/** Returns true if Path is usable as a git executable (filesystem check only). */
+	/**
+	 * Returns true if Path is usable as a git executable (filesystem check only).
+	 *
+	 * @param Path Candidate executable path.
+	 * @return True when the path exists and is executable.
+	 */
 	bool IsValidGitBinary(const FString& Path);
 }
