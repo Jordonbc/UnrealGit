@@ -32,4 +32,41 @@ namespace UnrealGit::Parsing
 		// string includes an offset.
 		return FDateTime::ParseIso8601(*IsoString, OutUtc);
 	}
+
+	class FNullSeparatedReader final
+	{
+	public:
+		explicit FNullSeparatedReader(const TArray<uint8>& InData)
+			: Data(MakeArrayView(InData.GetData(), InData.Num()))
+		{
+		}
+
+		explicit FNullSeparatedReader(TArrayView<const uint8> InData)
+			: Data(InData)
+		{
+		}
+
+		bool ReadNext(TArrayView<const uint8>& OutToken)
+		{
+			if (Offset >= Data.Num())
+			{
+				return false;
+			}
+
+			const int32 Start = Offset;
+			int32 End = Start;
+			while (End < Data.Num() && Data[End] != 0)
+			{
+				++End;
+			}
+
+			OutToken = Data.Slice(Start, End - Start);
+			Offset = (End < Data.Num()) ? (End + 1) : End;
+			return true;
+		}
+
+	private:
+		TArrayView<const uint8> Data;
+		int32 Offset = 0;
+	};
 }

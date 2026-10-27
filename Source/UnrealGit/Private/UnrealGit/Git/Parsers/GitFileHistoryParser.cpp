@@ -53,37 +53,6 @@ namespace UnrealGit::HistoryParsing
 		return true;
 	}
 
-	class FNullReader final
-	{
-	public:
-		explicit FNullReader(TArrayView<const uint8> InData)
-			: Data(InData)
-		{
-		}
-
-		bool ReadNext(TArrayView<const uint8>& OutToken)
-		{
-			if (Offset >= Data.Num())
-			{
-				return false;
-			}
-
-			const int32 Start = Offset;
-			int32 End = Start;
-			while (End < Data.Num() && Data[End] != 0)
-			{
-				++End;
-			}
-
-			OutToken = Data.Slice(Start, End - Start);
-			Offset = (End < Data.Num()) ? (End + 1) : End;
-			return true;
-		}
-
-	private:
-		TArrayView<const uint8> Data;
-		int32 Offset = 0;
-	};
 }
 
 bool FGitFileHistoryParser::Parse(const TArray<uint8>& StdOut, const FString& InitialRepoRelativePath, TArray<FGitFileRevision>& OutHistory, FString& OutError)
@@ -164,7 +133,7 @@ bool FGitFileHistoryParser::Parse(const TArray<uint8>& StdOut, const FString& In
 			continue;
 		}
 
-		UnrealGit::HistoryParsing::FNullReader NullReader(RecordView.Slice(NameStatusOffset, RecordView.Num() - NameStatusOffset));
+		UnrealGit::Parsing::FNullSeparatedReader NullReader(RecordView.Slice(NameStatusOffset, RecordView.Num() - NameStatusOffset));
 		TArrayView<const uint8> Token;
 
 		while (NullReader.ReadNext(Token))

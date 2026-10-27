@@ -6,38 +6,6 @@
 
 namespace UnrealGit::Parsing
 {
-	class FNullSeparatedReader final
-	{
-	public:
-		explicit FNullSeparatedReader(const TArray<uint8>& InData)
-			: Data(InData)
-		{
-		}
-
-		bool ReadNext(TArrayView<const uint8>& OutToken)
-		{
-			if (Offset >= Data.Num())
-			{
-				return false;
-			}
-
-			const int32 Start = Offset;
-			int32 End = Start;
-			while (End < Data.Num() && Data[End] != 0)
-			{
-				++End;
-			}
-
-			OutToken = MakeArrayView(Data.GetData() + Start, End - Start);
-			Offset = (End < Data.Num()) ? (End + 1) : End;
-			return true;
-		}
-
-	private:
-		const TArray<uint8>& Data;
-		int32 Offset = 0;
-	};
-
 	static bool ReadFieldAt(const uint8* Data, int32 Length, int32& InOutOffset, FString& OutField)
 	{
 		while (InOutOffset < Length && Data[InOutOffset] == ' ')
