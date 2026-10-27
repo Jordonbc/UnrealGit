@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 
 /**
+ * @enum EGitFileState
  * High-level Git file state used by UnrealGit domain model.
  *
  * This enum is independent of editor/source control UI state and is intended
@@ -24,6 +25,7 @@ enum class EGitFileState : uint8
 };
 
 /**
+ * @enum EGitLockState
  * Lock state derived from Git LFS locks.
  */
 enum class EGitLockState : uint8
@@ -35,6 +37,7 @@ enum class EGitLockState : uint8
 };
 
 /**
+ * @struct FGitResolveInfo
  * Merge-conflict details for a single file, derived from `git ls-files --unmerged`.
  *
  * Mirrors ISourceControlState::FResolveInfo so the editor can offer merge tooling.
@@ -53,6 +56,7 @@ struct FGitResolveInfo final
 };
 
 /**
+ * @struct FGitFileStatus
  * Parsed file status from `git status --porcelain=v2 -z`.
  */
 struct FGitFileStatus final
@@ -72,6 +76,7 @@ struct FGitFileStatus final
 };
 
 /**
+ * @struct FGitBranchStatus
  * Parsed branch status from porcelain v2 `--branch`.
  */
 struct FGitBranchStatus final
@@ -82,6 +87,7 @@ struct FGitBranchStatus final
 };
 
 /**
+ * @struct FGitStatusSnapshot
  * Parsed Git status snapshot.
  */
 struct FGitStatusSnapshot final
@@ -91,6 +97,7 @@ struct FGitStatusSnapshot final
 };
 
 /**
+ * @struct FGitLfsLock
  * Parsed Git LFS lock information.
  */
 struct FGitLfsLock final
@@ -103,6 +110,7 @@ struct FGitLfsLock final
 };
 
 /**
+ * @struct FGitRevisionInfo
  * Parsed Git revision metadata for history and diff selection.
  */
 struct FGitRevisionInfo final
@@ -125,6 +133,7 @@ struct FGitRevisionInfo final
 };
 
 /**
+ * @struct FGitFileRevision
  * File-specific revision including the path as it existed at the revision.
  */
 struct FGitFileRevision final
