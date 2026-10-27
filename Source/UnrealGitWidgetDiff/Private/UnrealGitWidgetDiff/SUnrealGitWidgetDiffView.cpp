@@ -122,6 +122,30 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 					})
 				]
 			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(8.0f, 0.0f, 2.0f, 0.0f)
+			[
+				SNew(SButton)
+				.ToolTipText(LOCTEXT("PreviousChangeTooltip", "Select and focus the previous changed widget"))
+				.IsEnabled_Lambda([this]() { return HasChanges(); })
+				.OnClicked_Lambda([this]()
+				{
+					NavigateChange(-1);
+					return FReply::Handled();
+				})
+				[ SNew(SImage).Image(FAppStyle::GetBrush(TEXT("Icons.ArrowLeft"))) ]
+			]
+			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(2.0f, 0.0f, 4.0f, 0.0f)
+			[
+				SNew(SButton)
+				.ToolTipText(LOCTEXT("NextChangeTooltip", "Select and focus the next changed widget"))
+				.IsEnabled_Lambda([this]() { return HasChanges(); })
+				.OnClicked_Lambda([this]()
+				{
+					NavigateChange(1);
+					return FReply::Handled();
+				})
+				[ SNew(SImage).Image(FAppStyle::GetBrush(TEXT("Icons.ArrowRight"))) ]
+			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f)
 			[
 				SNew(SCheckBox)
@@ -393,6 +417,110 @@ void SUnrealGitWidgetDiffView::FocusWidgetNode(const FUnrealGitWidgetNode& Node)
 	}
 }
 
+bool SUnrealGitWidgetDiffView::HasChanges() const
+{
+	for (const TSharedPtr<FUnrealGitWidgetNode>& Node : HierarchyItems)
+	{
+		if (Node.IsValid() && Node->Change != EUnrealGitWidgetChange::Unchanged)
+		{
+			return true;
+		}
+	}
+	return false;
+}
+
+TSharedPtr<FUnrealGitWidgetNode> SUnrealGitWidgetDiffView::FindHierarchyNode(const FString& Name) const
+{
+	if (Name.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	for (const TSharedPtr<FUnrealGitWidgetNode>& Node : HierarchyItems)
+	{
+		if (Node.IsValid() && Node->Name == Name)
+		{
+			return Node;
+		}
+	}
+	return nullptr;
+}
+
+void SUnrealGitWidgetDiffView::ExpandAncestors(const FUnrealGitWidgetNode& Node)
+{
+	if (!HierarchyList.IsValid())
+	{
+		return;
+	}
+
+	// Names are unique, and the visited set keeps malformed parent links bounded.
+	TSet<FString> Visited;
+	FString ParentName = Node.ParentName;
+	while (!ParentName.IsEmpty() && !Visited.Contains(ParentName))
+	{
+		Visited.Add(ParentName);
+
+		const TSharedPtr<FUnrealGitWidgetNode> Parent = FindHierarchyNode(ParentName);
+		if (!Parent.IsValid())
+		{
+			return;
+		}
+		HierarchyList->SetItemExpansion(Parent, true);
+		ParentName = Parent->ParentName;
+	}
+}
+
+void SUnrealGitWidgetDiffView::NavigateChange(int32 Direction)
+{
+	if (!HierarchyList.IsValid() || Direction == 0)
+	{
+		return;
+	}
+
+	// Walk the changes in hierarchy order. The current position is derived from
+	// the live selection so navigation stays correct across session rebuilds.
+	TArray<TSharedPtr<FUnrealGitWidgetNode>> Changes;
+	int32 CurrentIndex = INDEX_NONE;
+
+	const TArray<TSharedPtr<FUnrealGitWidgetNode>> SelectedItems = HierarchyList->GetSelectedItems();
+	const TSharedPtr<FUnrealGitWidgetNode> Selected = SelectedItems.Num() > 0 ? SelectedItems[0] : nullptr;
+
+	for (const TSharedPtr<FUnrealGitWidgetNode>& Node : HierarchyItems)
+	{
+		if (!Node.IsValid() || Node->Change == EUnrealGitWidgetChange::Unchanged)
+		{
+			continue;
+		}
+		if (Node == Selected)
+		{
+			CurrentIndex = Changes.Num();
+		}
+		Changes.Add(Node);
+	}
+
+	if (Changes.Num() == 0)
+	{
+		return;
+	}
+
+	const int32 Step = Direction > 0 ? 1 : -1;
+	int32 NextIndex = 0;
+	if (CurrentIndex == INDEX_NONE)
+	{
+		NextIndex = Step > 0 ? 0 : Changes.Num() - 1;
+	}
+	else
+	{
+		NextIndex = (CurrentIndex + Step + Changes.Num()) % Changes.Num();
+	}
+
+	const TSharedPtr<FUnrealGitWidgetNode>& Target = Changes[NextIndex];
+	ExpandAncestors(*Target);
+	HierarchyList->SetSelection(Target);
+	HierarchyList->RequestScrollIntoView(Target);
+	FocusWidgetNode(*Target);
+}
+
 void SUnrealGitWidgetDiffView::EnsureLivePreviews()
 {
 	if (bLivePreviewsBuilt || !Session.IsValid() || Session->State != EUnrealGitWidgetDiffState::Ready || !Session->Images.IsValid())
@@ -469,14 +597,12 @@ void SUnrealGitWidgetDiffView::SelectWidgetByName(const FString& Name)
 	{
 		return;
 	}
-	for (const TSharedPtr<FUnrealGitWidgetNode>& Node : HierarchyItems)
+
+	const TSharedPtr<FUnrealGitWidgetNode> Node = FindHierarchyNode(Name);
+	if (Node.IsValid())
 	{
-		if (Node.IsValid() && Node->Name == Name)
-		{
-			HierarchyList->SetSelection(Node);
-			HierarchyList->RequestScrollIntoView(Node);
-			break;
-		}
+		HierarchyList->SetSelection(Node);
+		HierarchyList->RequestScrollIntoView(Node);
 	}
 }
 
@@ -730,14 +856,11 @@ void SUnrealGitWidgetDiffView::OnPropertySelectionChanged(TSharedPtr<FDiffEntry>
 	}
 	TGuardValue<bool> SelectionGuard(bSyncingSelection, true);
 
-	for (const TSharedPtr<FUnrealGitWidgetNode>& Node : HierarchyItems)
+	const TSharedPtr<FUnrealGitWidgetNode> Node = FindHierarchyNode(Item->Name);
+	if (Node.IsValid())
 	{
-		if (Node.IsValid() && Node->Name == Item->Name)
-		{
-			HierarchyList->SetSelection(Node);
-			HierarchyList->RequestScrollIntoView(Node);
-			break;
-		}
+		HierarchyList->SetSelection(Node);
+		HierarchyList->RequestScrollIntoView(Node);
 	}
 }
 

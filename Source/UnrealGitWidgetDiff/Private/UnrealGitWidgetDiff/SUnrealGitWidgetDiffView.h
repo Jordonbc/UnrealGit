@@ -94,6 +94,14 @@ private:
 	void OnGetHierarchyChildren(TSharedPtr<FUnrealGitWidgetNode> Item, TArray<TSharedPtr<FUnrealGitWidgetNode>>& OutChildren) const;
 	void OnHierarchyRowClicked(TSharedPtr<FUnrealGitWidgetNode> Item);
 	void FocusWidgetNode(const FUnrealGitWidgetNode& Node);
+
+	/** Moves the selection to the next (+1) or previous (-1) changed widget and focuses it. */
+	void NavigateChange(int32 Direction);
+	/** Expands every ancestor of the node so the hierarchy can scroll to it. */
+	void ExpandAncestors(const FUnrealGitWidgetNode& Node);
+	TSharedPtr<FUnrealGitWidgetNode> FindHierarchyNode(const FString& Name) const;
+	/** True when the diff contains at least one changed widget to navigate to. */
+	bool HasChanges() const;
 	struct FDiffEntry
 	{
 		FString Name;
