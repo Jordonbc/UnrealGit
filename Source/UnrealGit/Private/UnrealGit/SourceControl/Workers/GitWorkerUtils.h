@@ -11,6 +11,7 @@
 #include "UnrealGit/Git/Parsers/GitRevParseParser.h"
 #include "UnrealGit/Git/Parsers/GitFileHistoryParser.h"
 #include "UnrealGit/Git/Parsers/GitLfsLocksParser.h"
+#include "UnrealGit/SourceControl/Workers/UnrealGitSourceControlWorkers.h"
 
 namespace UnrealGit::Workers
 {
@@ -61,6 +62,38 @@ namespace UnrealGit::Workers
 		}
 
 		return Results;
+	}
+
+	/** Queries `git ls-files` and returns the tracked paths as a set. */
+	inline bool QueryTrackedPaths(
+		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
+		const FString& RepoRoot,
+		const TArray<FString>& RelativePaths,
+		TSet<FString>& OutTrackedPaths)
+	{
+		FGitProcessRequest Request;
+		Request.WorkingDirectory = FString();
+		Request.RepoRoot = RepoRoot;
+		Request.Arguments = { TEXT("ls-files"), TEXT("-z") };
+
+		if (RelativePaths.Num() > 0)
+		{
+			Request.Arguments.Add(TEXT("--"));
+			Request.Arguments.Append(RelativePaths);
+		}
+
+		const FGitProcessResult Result = ProcessRunner->Run(Request);
+		if (Result.ExitCode != 0)
+		{
+			return false;
+		}
+
+		for (const FString& Path : ParseNullDelimitedList(Result.StdOut))
+		{
+			OutTrackedPaths.Add(Path);
+		}
+
+		return true;
 	}
 
 	inline FGitProcessRequest MakeGitRequest(const FString& RepoRoot, const TArray<FString>& Arguments)
@@ -117,6 +150,33 @@ namespace UnrealGit::Workers
 					*CurrentDir, RootResult.ExitCode, *StdErr);
 			*OutError = Err;
 		}
+
+		return false;
+	}
+
+	/** Normalizes path separators to forward slashes for git and lock-path comparisons. */
+	inline FString NormalizePathSeparators(FString Path)
+	{
+		Path.ReplaceInline(TEXT("\\"), TEXT("/"));
+		return Path;
+	}
+
+	/** Ensures a repo root is resolved, writing the standard error message into the worker output on failure. */
+	inline bool EnsureRepoRootOrFail(
+		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
+		const FString& WorkingDirectoryHint,
+		FString& InOutRepoRoot,
+		FUnrealGitWorkerOutput& OutOutput,
+		const TCHAR* DefaultErrorMessage = TEXT("Git repository root could not be determined."))
+	{
+		FString RepoRootError;
+		if (EnsureRepoRoot(ProcessRunner, WorkingDirectoryHint, InOutRepoRoot, &RepoRootError))
+		{
+			return true;
+		}
+
+		OutOutput.bSuccess = false;
+		OutOutput.ErrorText = FText::FromString(RepoRootError.IsEmpty() ? FString(DefaultErrorMessage) : RepoRootError);
 
 		return false;
 	}
@@ -299,15 +359,12 @@ namespace UnrealGit::Workers
 		TMap<FString, FString> LockIdByPath;
 		for (const FGitLfsLock& Lock : Locks)
 		{
-			FString LockPath = Lock.Path;
-			LockPath.ReplaceInline(TEXT("\\"), TEXT("/"));
-			LockIdByPath.Add(MoveTemp(LockPath), Lock.Id);
+			LockIdByPath.Add(NormalizePathSeparators(Lock.Path), Lock.Id);
 		}
 
 		for (const FString& RelativePath : RelativePaths)
 		{
-			FString NormalizedPath = RelativePath;
-			NormalizedPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+			const FString NormalizedPath = NormalizePathSeparators(RelativePath);
 
 			const FString* LockId = LockIdByPath.Find(NormalizedPath);
 			if (!LockId || LockId->IsEmpty())

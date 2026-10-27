@@ -342,6 +342,19 @@ bool FUnrealGitSourceControlProvider::GetStateBranchAtIndex(const int32 /*Branch
 	return false;
 }
 
+void FUnrealGitSourceControlProvider::ApplyOperationStateToFiles(const TArray<FString>& Files, bool bCheckedOut, EGitLockState InLockState, bool& bAnyStateChanged)
+{
+	for (const FString& File : Files)
+	{
+		const FString Abs = FPaths::ConvertRelativePathToFull(File);
+		const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
+		const TSharedRef<FUnrealGitSourceControlState> State = StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef);
+		State->SetCheckedOut(bCheckedOut);
+		State->SetLockState(InLockState, FString());
+		bAnyStateChanged = true;
+	}
+}
+
 FSourceControlStateRef FUnrealGitSourceControlProvider::GetOrCreateStateInternal(const FString& AbsoluteFilename)
 {
 	FScopeLock Lock(&StateCacheLock);
@@ -1108,8 +1121,7 @@ void FUnrealGitSourceControlProvider::ApplyLfsLocksToStates(const TOptional<FGit
 
 	for (const FGitLfsLock& Lock : Locks)
 	{
-		FString Rel = Lock.Path;
-		Rel.ReplaceInline(TEXT("\\"), TEXT("/"));
+		FString Rel = UnrealGit::Workers::NormalizePathSeparators(Lock.Path);
 		const FString Abs = FPaths::ConvertRelativePathToFull(RepoRoot / Rel);
 
 		const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
@@ -1174,13 +1186,7 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 		if (OperationName == TEXT("CheckOut"))
 		{
 			// Roll back the optimistic checkout state.
-			for (const FString& File : Files)
-			{
-				const FString Abs = FPaths::ConvertRelativePathToFull(File);
-				const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
-				StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetCheckedOut(false);
-			}
-			bAnyStateChanged = true;
+			ApplyOperationStateToFiles(Files, false, EGitLockState::NotLocked, bAnyStateChanged);
 		}
 
 		if (OperationName == TEXT("Connect"))
@@ -1202,25 +1208,11 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 
 	if (Output.bSuccess && OperationName == TEXT("CheckOut"))
 	{
-		for (const FString& File : Files)
-		{
-			const FString Abs = FPaths::ConvertRelativePathToFull(File);
-			const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
-			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetCheckedOut(true);
-			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetLockState(EGitLockState::LockedByMe, FString());
-			bAnyStateChanged = true;
-		}
+		ApplyOperationStateToFiles(Files, true, EGitLockState::LockedByMe, bAnyStateChanged);
 	}
 	else if (Output.bSuccess && (OperationName == TEXT("CheckIn") || OperationName == TEXT("Revert") || OperationName == TEXT("Delete") || OperationName == TEXT("ForceUnlock")))
 	{
-		for (const FString& File : Files)
-		{
-			const FString Abs = FPaths::ConvertRelativePathToFull(File);
-			const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
-			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetCheckedOut(false);
-			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetLockState(EGitLockState::NotLocked, FString());
-			bAnyStateChanged = true;
-		}
+		ApplyOperationStateToFiles(Files, false, EGitLockState::NotLocked, bAnyStateChanged);
 	}
 
 	if (Output.bSuccess && (OperationName == TEXT("CheckOut") || OperationName == TEXT("CheckIn") || OperationName == TEXT("Revert") || OperationName == TEXT("ForceUnlock")))

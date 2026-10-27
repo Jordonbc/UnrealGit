@@ -6,6 +6,7 @@
 #include "ISourceControlProvider.h"
 #include "UnrealGit/Settings/UnrealGitProviderSettings.h"
 #include "UnrealGit/Git/GitEnvironmentInfo.h"
+#include "UnrealGit/Git/GitModels.h"
 
 class IGitProcessRunner;
 class FUnrealGitSourceControlState;
@@ -117,6 +118,9 @@ private:
 	void UpdateStatesFromStatusSnapshot(const struct FGitStatusSnapshot& Snapshot, const TArray<FString>& RequestedFiles);
 	void ApplyLfsLocksToStates(const TOptional<struct FGitStatusSnapshot>& Snapshot, const TArray<struct FGitLfsLock>& Locks);
 	void ReconcileWorkerOutput(const FSourceControlOperationRef& Operation, const TArray<FString>& Files, const FSourceControlOperationComplete& Delegate, const struct FUnrealGitWorkerOutput& Output);
+
+	/** Applies checkout/lock state to the given files after a successful operation. */
+	void ApplyOperationStateToFiles(const TArray<FString>& Files, bool bCheckedOut, EGitLockState LockState, bool& bAnyStateChanged);
 
 	FSourceControlStateRef GetOrCreateStateInternal(const FString& AbsoluteFilename);
 	FString GetWorkingDirectoryHint() const;

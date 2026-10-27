@@ -26,11 +26,8 @@ void FGitCheckInWorker::Execute(
 	OutOutput = FUnrealGitWorkerOutput();
 
 	FString RepoRoot = CurrentRepoRoot;
-	FString RepoRootError;
-	if (!UnrealGit::Workers::EnsureRepoRoot(ProcessRunner, WorkingDirectoryHint, RepoRoot, &RepoRootError))
+	if (!UnrealGit::Workers::EnsureRepoRootOrFail(ProcessRunner, WorkingDirectoryHint, RepoRoot, OutOutput))
 	{
-		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(RepoRootError.IsEmpty() ? TEXT("Git repository root could not be determined.") : RepoRootError);
 		return;
 	}
 

@@ -27,13 +27,13 @@ void FGitUpdateStatusWorker::Execute(
 	OutOutput = FUnrealGitWorkerOutput();
 
 	FString RepoRoot = CurrentRepoRoot;
-	FString RepoRootError;
-	if (!UnrealGit::Workers::EnsureRepoRoot(ProcessRunner, WorkingDirectoryHint, RepoRoot, &RepoRootError))
+	if (!UnrealGit::Workers::EnsureRepoRootOrFail(
+		ProcessRunner,
+		WorkingDirectoryHint,
+		RepoRoot,
+		OutOutput,
+		TEXT("Git repository root could not be determined. Ensure the project is inside a Git worktree.")))
 	{
-		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(RepoRootError.IsEmpty()
-			? TEXT("Git repository root could not be determined. Ensure the project is inside a Git worktree.")
-			: RepoRootError);
 		return;
 	}
 
@@ -155,46 +155,27 @@ void FGitUpdateStatusWorker::Execute(
 		FoundRelativePaths.Add(FileStatus.RelativePath);
 	}
 
+	auto AddUnchangedEntry = [&Snapshot](const FString& RelativePath)
+	{
+		FGitFileStatus UnchangedStatus;
+		UnchangedStatus.RelativePath = RelativePath;
+		UnchangedStatus.State = EGitFileState::Unchanged;
+		UnchangedStatus.bIsTracked = true;
+		Snapshot.Files.Add(MoveTemp(UnchangedStatus));
+	};
+
 	if (Files.Num() == 0)
 	{
-		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Full repo query - fetching all tracked files with git ls-files"));
-		FGitProcessRequest LsFilesRequest;
-		LsFilesRequest.WorkingDirectory = FString();
-		LsFilesRequest.RepoRoot = RepoRoot;
-		LsFilesRequest.Arguments = {
-			TEXT("ls-files"),
-			TEXT("-z"),
-		};
-
-		const FGitProcessResult LsFilesResult = ProcessRunner->Run(LsFilesRequest);
-		if (LsFilesResult.ExitCode == 0)
+		TSet<FString> TrackedPaths;
+		if (UnrealGit::Workers::QueryTrackedPaths(ProcessRunner, RepoRoot, TArray<FString>(), TrackedPaths))
 		{
-			TArray<FString> AllTrackedPaths = UnrealGit::Workers::ParseNullDelimitedList(LsFilesResult.StdOut);
-			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: git ls-files found %d tracked files"), AllTrackedPaths.Num());
-
-			TSet<FString> TrackedSet;
-			for (const FString& Path : AllTrackedPaths)
-			{
-				TrackedSet.Add(Path);
-			}
-
-			int32 AddedCount = 0;
-			for (const FString& TrackedPath : AllTrackedPaths)
+			for (const FString& TrackedPath : TrackedPaths)
 			{
 				if (!FoundRelativePaths.Contains(TrackedPath))
 				{
-					FGitFileStatus UnchangedStatus;
-					UnchangedStatus.RelativePath = TrackedPath;
-					UnchangedStatus.State = EGitFileState::Unchanged;
-					UnchangedStatus.bIsTracked = true;
-					UnchangedStatus.bIsStaged = false;
-					UnchangedStatus.bIsUnstaged = false;
-					UnchangedStatus.bIsConflicted = false;
-					Snapshot.Files.Add(MoveTemp(UnchangedStatus));
-					AddedCount++;
+					AddUnchangedEntry(TrackedPath);
 				}
 			}
-			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Added %d Unchanged entries from ls-files"), AddedCount);
 		}
 	}
 
@@ -220,54 +201,20 @@ void FGitUpdateStatusWorker::Execute(
 
 	if (RepoRelativePathsNotInStatus.Num() > 0)
 	{
-		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Running git ls-files for %d files"), RepoRelativePathsNotInStatus.Num());
-		FGitProcessRequest LsFilesRequest;
-		LsFilesRequest.WorkingDirectory = FString();
-		LsFilesRequest.RepoRoot = RepoRoot;
-		LsFilesRequest.Arguments = {
-			TEXT("ls-files"),
-			TEXT("-z"),
-		};
-		LsFilesRequest.Arguments.Add(TEXT("--"));
-		for (const FString& Relative : RepoRelativePathsNotInStatus)
+		TSet<FString> TrackedPaths;
+		if (UnrealGit::Workers::QueryTrackedPaths(ProcessRunner, RepoRoot, RepoRelativePathsNotInStatus, TrackedPaths))
 		{
-			LsFilesRequest.Arguments.Add(Relative);
-		}
-
-		const FGitProcessResult LsFilesResult = ProcessRunner->Run(LsFilesRequest);
-		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: git ls-files result: exit=%d, stdout_len=%d"), LsFilesResult.ExitCode, LsFilesResult.StdOut.Num());
-		if (LsFilesResult.ExitCode == 0)
-		{
-			TArray<FString> TrackedPaths = UnrealGit::Workers::ParseNullDelimitedList(LsFilesResult.StdOut);
-
-			TSet<FString> TrackedSet;
-			for (const FString& Path : TrackedPaths)
-			{
-				TrackedSet.Add(Path);
-			}
-			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: ls-files found %d tracked paths"), TrackedSet.Num());
-
-			int32 UnchangedCount = 0;
 			for (const FString& Relative : RepoRelativePathsNotInStatus)
 			{
-				if (TrackedSet.Contains(Relative))
+				if (TrackedPaths.Contains(Relative))
 				{
-					FGitFileStatus UnchangedStatus;
-					UnchangedStatus.RelativePath = Relative;
-					UnchangedStatus.State = EGitFileState::Unchanged;
-					UnchangedStatus.bIsTracked = true;
-					UnchangedStatus.bIsStaged = false;
-					UnchangedStatus.bIsUnstaged = false;
-					UnchangedStatus.bIsConflicted = false;
-					Snapshot.Files.Add(MoveTemp(UnchangedStatus));
-					UnchangedCount++;
+					AddUnchangedEntry(Relative);
 				}
 			}
-			UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: Added %d Unchanged entries to snapshot"), UnchangedCount);
 		}
 		else
 		{
-			UE_LOG(LogUnrealGit, Warning, TEXT("UpdateStatus: git ls-files failed with exit code %d"), LsFilesResult.ExitCode);
+			UE_LOG(LogUnrealGit, Warning, TEXT("UpdateStatus: git ls-files failed for %d path(s)"), RepoRelativePathsNotInStatus.Num());
 		}
 	}
 
