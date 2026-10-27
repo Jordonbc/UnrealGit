@@ -648,6 +648,12 @@ void SUnrealGitWidgetDiffView::OnHierarchySelectionChanged(TSharedPtr<FUnrealGit
 	if (RightCanvas.IsValid()) RightCanvas->Invalidate(EInvalidateWidget::Paint);
 	if (DiffCanvas.IsValid()) DiffCanvas->Invalidate(EInvalidateWidget::Paint);
 
+	if (bSyncingSelection)
+	{
+		return;
+	}
+	TGuardValue<bool> SelectionGuard(bSyncingSelection, true);
+
 	if (Item.IsValid() && PropertyList.IsValid())
 	{
 		for (const TSharedPtr<FDiffEntry>& Entry : PropertyItems)
@@ -664,10 +670,15 @@ void SUnrealGitWidgetDiffView::OnHierarchySelectionChanged(TSharedPtr<FUnrealGit
 
 void SUnrealGitWidgetDiffView::OnPropertySelectionChanged(TSharedPtr<FDiffEntry> Item, ESelectInfo::Type /*SelectInfo*/)
 {
+	if (bSyncingSelection)
+	{
+		return;
+	}
 	if (!Item.IsValid() || !HierarchyList.IsValid())
 	{
 		return;
 	}
+	TGuardValue<bool> SelectionGuard(bSyncingSelection, true);
 
 	for (const TSharedPtr<FUnrealGitWidgetNode>& Node : HierarchyItems)
 	{

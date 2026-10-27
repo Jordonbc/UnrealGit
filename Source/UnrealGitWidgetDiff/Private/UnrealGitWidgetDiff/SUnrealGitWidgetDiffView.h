@@ -111,6 +111,8 @@ private:
 
 	void RebuildDiffEntries();
 	void OnPropertySelectionChanged(TSharedPtr<FDiffEntry> Item, ESelectInfo::Type SelectInfo);
+	/** Prevents the hierarchy and summary lists from re-entering each other's selection handlers. */
+	bool bSyncingSelection = false;
 
 	void RebuildHierarchy();
 	TSharedRef<ITableRow> OnGenerateHierarchyRow(TSharedPtr<FUnrealGitWidgetNode> Item, const TSharedRef<STableViewBase>& OwnerTable);
