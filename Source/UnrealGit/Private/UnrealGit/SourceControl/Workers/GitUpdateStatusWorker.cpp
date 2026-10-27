@@ -363,7 +363,13 @@ void FGitUpdateStatusWorker::Execute(
 		LocksRequest.Arguments = { TEXT("lfs"), TEXT("locks"), TEXT("--json") };
 
 		const FGitProcessResult LocksResult = ProcessRunner->Run(LocksRequest);
-		if (LocksResult.ExitCode == 0)
+		if (LocksResult.ExitCode != 0)
+		{
+			UE_LOG(LogUnrealGit, Warning, TEXT("UpdateStatus: git lfs locks failed (exit %d): %s"),
+				LocksResult.ExitCode,
+				*UnrealGit::Workers::BytesToTextUtf8Lossy(LocksResult.StdErr).TrimStartAndEnd());
+		}
+		else if (LocksResult.ExitCode == 0)
 		{
 			TArray<FGitLfsLock> Locks;
 			FString LocksError;

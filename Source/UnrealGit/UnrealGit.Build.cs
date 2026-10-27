@@ -31,6 +31,7 @@ public class UnrealGit : ModuleRules
 				"UnrealEd",
 				"SourceControlWindows",
 				"AssetTools",
+				"ContentBrowser",
 				"ToolMenus",
 				"DesktopPlatform",
 			}

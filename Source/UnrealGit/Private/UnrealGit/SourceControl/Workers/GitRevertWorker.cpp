@@ -40,7 +40,6 @@ void FGitRevertWorker::Execute(
 			TEXT("--source=HEAD"),
 			TEXT("--staged"),
 			TEXT("--worktree"),
-			TEXT("--ignore-unmatch"),
 			TEXT("--"),
 			TEXT(".")
 		};
@@ -64,17 +63,40 @@ void FGitRevertWorker::Execute(
 			return;
 		}
 
+		const TArray<FString> RestorePrefix = { TEXT("restore"), TEXT("--source=HEAD"), TEXT("--staged"), TEXT("--worktree") };
 		FString RestoreError;
-		if (!UnrealGit::Workers::RunGitWithBatchedPaths(
-			ProcessRunner,
-			RepoRoot,
-			{ TEXT("restore"), TEXT("--source=HEAD"), TEXT("--staged"), TEXT("--worktree"), TEXT("--ignore-unmatch") },
-			RelativePaths,
-			RestoreError))
+		if (!UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, RestorePrefix, RelativePaths, RestoreError))
 		{
-			OutOutput.bSuccess = false;
-			OutOutput.ErrorText = FText::FromString(RestoreError);
-			return;
+			// Added/untracked paths are not in HEAD, so restore cannot match them; unstage those instead.
+			FString FirstError;
+			for (const FString& RelativePath : RelativePaths)
+			{
+				FString SingleError;
+				if (UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, RestorePrefix, { RelativePath }, SingleError))
+				{
+					continue;
+				}
+
+				FGitProcessRequest ResetRequest;
+				ResetRequest.WorkingDirectory = FString();
+				ResetRequest.RepoRoot = RepoRoot;
+				ResetRequest.Arguments = { TEXT("reset"), TEXT("-q"), TEXT("HEAD"), TEXT("--"), RelativePath };
+
+				const FGitProcessResult ResetResult = ProcessRunner->Run(ResetRequest);
+				if (ResetResult.ExitCode != 0 && FirstError.IsEmpty())
+				{
+					FirstError = SingleError.IsEmpty()
+						? UnrealGit::Workers::BytesToTextUtf8Lossy(ResetResult.StdErr)
+						: SingleError;
+				}
+			}
+
+			if (!FirstError.IsEmpty())
+			{
+				OutOutput.bSuccess = false;
+				OutOutput.ErrorText = FText::FromString(FirstError);
+				return;
+			}
 		}
 	}
 

@@ -20,6 +20,7 @@
 #include "UnrealGit/Settings/UnrealGitUserSettings.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitCopyWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitDeleteWorker.h"
+#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitForceUnlockWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitResolveWorker.h"
 #include "UnrealGit/SourceControl/Workers/GitCheckInWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitCheckOutWorker.h"
@@ -51,6 +52,35 @@ static void ApplyLocalReadOnlyState(const FString& AbsoluteFilename, bool bShoul
 	{
 		PlatformFile.SetReadOnly(*AbsoluteFilename, bShouldBeReadOnly);
 	}
+}
+
+static bool DoesLockOwnerMatchCurrentUser(const FString& Owner, const FString& UserName, const FString& UserEmail)
+{
+	if (Owner.IsEmpty())
+	{
+		return false;
+	}
+
+	if (Owner.Equals(UserName, ESearchCase::IgnoreCase) || Owner.Equals(UserEmail, ESearchCase::IgnoreCase))
+	{
+		return true;
+	}
+
+	FString EmailLocalPart = UserEmail;
+	int32 AtIndex = INDEX_NONE;
+	if (EmailLocalPart.FindChar(TEXT('@'), AtIndex))
+	{
+		EmailLocalPart.LeftInline(AtIndex);
+	}
+
+	// LFS server accounts often differ slightly from the git identity (e.g. "Jordon" vs "jordonbc"),
+	// so accept a unique-enough prefix match in either direction.
+	const bool bEmailPrefixMatches = EmailLocalPart.Len() >= 3
+		&& (Owner.StartsWith(EmailLocalPart, ESearchCase::IgnoreCase) || EmailLocalPart.StartsWith(Owner, ESearchCase::IgnoreCase));
+	const bool bUserNamePrefixMatches = UserName.Len() >= 3
+		&& (Owner.StartsWith(UserName, ESearchCase::IgnoreCase) || UserName.StartsWith(Owner, ESearchCase::IgnoreCase));
+
+	return bEmailPrefixMatches || bUserNamePrefixMatches;
 }
 
 static FString FindRepositoryRootPath(const FString& StartDirectory)
@@ -570,6 +600,10 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	{
 		Worker = MakeUnique<FGitGetHistoryWorker>();
 	}
+	else if (OpName == "ForceUnlock")
+	{
+		Worker = MakeUnique<FGitForceUnlockWorker>();
+	}
 
 	if (!Worker)
 	{
@@ -655,7 +689,8 @@ bool FUnrealGitSourceControlProvider::CanExecuteOperation(const FSourceControlOp
 		|| OpName == "Revert"
 		|| OpName == "CheckIn"
 		|| OpName == "Sync"
-		|| OpName == "GetHistory";
+		|| OpName == "GetHistory"
+		|| OpName == "ForceUnlock";
 }
 
 bool FUnrealGitSourceControlProvider::CanCancelOperation(const FSourceControlOperationRef& /*InOperation*/) const
@@ -936,6 +971,74 @@ bool FUnrealGitSourceControlProvider::InitializeRepository(const FString& Origin
 	return true;
 }
 
+void FUnrealGitSourceControlProvider::LogDiagnostics()
+{
+	if (!ProcessRunner.IsValid())
+	{
+		Init(true);
+	}
+
+	if (!ProcessRunner.IsValid())
+	{
+		UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: diagnostics: provider not initialized."));
+		return;
+	}
+
+	NextLfsLocksRefreshUtc = FDateTime(0);
+	const FSourceControlOperationRef UpdateOp = ISourceControlOperation::Create<FUpdateStatus>();
+	Execute(UpdateOp, nullptr, TArray<FString>(), EConcurrency::Synchronous, FSourceControlOperationComplete());
+
+	UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: diagnostics: enabled=%d available=%d repo=\"%s\""),
+		IsEnabled() ? 1 : 0,
+		IsAvailable() ? 1 : 0,
+		*RepoRoot);
+	UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: diagnostics: status=\"%s\""), *GetStatusText().ToString());
+
+	int32 TotalStates = 0;
+	int32 CheckedOutStates = 0;
+	int32 CheckedOutOtherStates = 0;
+	{
+		FScopeLock Lock(&StateCacheLock);
+		TotalStates = StateCache.Num();
+		for (const TPair<FString, FSourceControlStateRef>& Pair : StateCache)
+		{
+			if (Pair.Value->IsCheckedOut())
+			{
+				++CheckedOutStates;
+			}
+
+			FString Who;
+			if (Pair.Value->IsCheckedOutOther(&Who))
+			{
+				++CheckedOutOtherStates;
+			}
+		}
+	}
+
+	UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: diagnostics: states=%d checkedOut=%d checkedOutOther=%d cachedLocks=%d"),
+		TotalStates,
+		CheckedOutStates,
+		CheckedOutOtherStates,
+		bHasCachedLfsLocks ? CachedLfsLocks.Num() : -1);
+
+	for (const FGitLfsLock& LockInfo : CachedLfsLocks)
+	{
+		const FString Abs = FPaths::ConvertRelativePathToFull(RepoRoot / LockInfo.Path);
+		const FSourceControlStatePtr State = ISourceControlProvider::GetState(Abs, EStateCacheUsage::Use);
+
+		FString Who;
+		const bool bCheckedOutOther = State.IsValid() && State->IsCheckedOutOther(&Who);
+		UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: diagnostics: lock=\"%s\" key=\"%s\" tracked=%d checkedOut=%d other=%d owner=\"%s\" status=\"%s\""),
+			*LockInfo.Path,
+			*Abs,
+			(State.IsValid() && State->IsSourceControlled()) ? 1 : 0,
+			(State.IsValid() && State->IsCheckedOut()) ? 1 : 0,
+			bCheckedOutOther ? 1 : 0,
+			*Who,
+			State.IsValid() ? *State->GetStatusText().Get(FText::GetEmpty()).ToString() : TEXT("<none>"));
+	}
+}
+
 void FUnrealGitSourceControlProvider::UpdateStatesFromStatusSnapshot(const FGitStatusSnapshot& Snapshot, const TArray<FString>& RequestedFiles)
 {
 	TSet<FString> RequestedSet;
@@ -949,18 +1052,6 @@ void FUnrealGitSourceControlProvider::UpdateStatesFromStatusSnapshot(const FGitS
 		const FString Abs = FPaths::ConvertRelativePathToFull(RepoRoot / FileStatus.RelativePath);
 		FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
 		StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->UpdateFromStatus(FileStatus);
-
-		if (StateRef->IsSourceControlled())
-		{
-			// Perforce-style local read-only state for assets: clean, unlocked content files are
-			// read-only so the editor prompts for checkout before editing; checking out (or
-			// locking) makes them writable. Non-content files are left untouched.
-			const bool bIsContentFile = FileStatus.RelativePath.StartsWith(TEXT("Content/"), ESearchCase::IgnoreCase);
-			if (bIsContentFile)
-			{
-				ApplyLocalReadOnlyState(Abs, !StateRef->IsCheckedOut() && !StateRef->IsConflicted());
-			}
-		}
 	}
 
 	// Ensure explicitly requested files have state objects even if not returned by the status snapshot.
@@ -1000,21 +1091,21 @@ void FUnrealGitSourceControlProvider::ApplyLfsLocksToStates(const TOptional<FGit
 	for (const FGitLfsLock& Lock : Locks)
 	{
 		FString Rel = Lock.Path;
-		FPaths::MakeStandardFilename(Rel);
+		Rel.ReplaceInline(TEXT("\\"), TEXT("/"));
 		const FString Abs = FPaths::ConvertRelativePathToFull(RepoRoot / Rel);
 
+		const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
+
 		EGitLockState LockState = EGitLockState::LockedByOther;
-		if (!MyEmail.IsEmpty() && Lock.OwnerEmail == MyEmail)
-		{
-			LockState = EGitLockState::LockedByMe;
-		}
-		else if (!MyName.IsEmpty() && Lock.OwnerName == MyName)
+		const bool bOwnerMatches = DoesLockOwnerMatchCurrentUser(Lock.OwnerName, MyName, MyEmail)
+			|| DoesLockOwnerMatchCurrentUser(Lock.OwnerEmail, MyName, MyEmail);
+		const bool bCheckedOutByMe = StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->IsCheckedOutByMe();
+		if (bOwnerMatches || bCheckedOutByMe)
 		{
 			LockState = EGitLockState::LockedByMe;
 		}
 
 		FString Owner = !Lock.OwnerName.IsEmpty() ? Lock.OwnerName : Lock.OwnerEmail;
-		const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
 		StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetLockState(LockState, MoveTemp(Owner));
 	}
 }
@@ -1117,6 +1208,59 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 	{
 		ApplyLfsLocksToStates(Output.StatusSnapshot, CachedLfsLocks);
 		bAnyStateChanged = true;
+	}
+
+	if (Output.bSuccess && Output.bHasLfsLocks)
+	{
+		// One-shot diagnostic, only when the lock set changes.
+		const int32 LockCount = CachedLfsLocks.Num();
+		if (LockCount != LastReportedLfsLockCount)
+		{
+			LastReportedLfsLockCount = LockCount;
+
+			int32 CachedStateCount = 0;
+			{
+				FScopeLock Lock(&StateCacheLock);
+				CachedStateCount = StateCache.Num();
+			}
+
+			UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: locks=%d cachedStates=%d repo=\"%s\""), LockCount, CachedStateCount, *RepoRoot);
+
+			if (LockCount > 0)
+			{
+				const FGitLfsLock& FirstLock = CachedLfsLocks[0];
+				const FString Abs = FPaths::ConvertRelativePathToFull(RepoRoot / FirstLock.Path);
+				const FSourceControlStatePtr State = ISourceControlProvider::GetState(Abs, EStateCacheUsage::Use);
+				FString Who;
+				const bool bOther = State.IsValid() && State->IsCheckedOutOther(&Who);
+
+				UE_LOG(LogUnrealGit, Warning, TEXT("UnrealGit: first lock=\"%s\" key=\"%s\" tracked=%d checkedOut=%d other=%d owner=\"%s\" status=\"%s\""),
+					*FirstLock.Path,
+					*Abs,
+					(State.IsValid() && State->IsSourceControlled()) ? 1 : 0,
+					(State.IsValid() && State->IsCheckedOut()) ? 1 : 0,
+					bOther ? 1 : 0,
+					*Who,
+					State.IsValid() ? *State->GetStatusText().Get(FText::GetEmpty()).ToString() : TEXT("<none>"));
+			}
+		}
+	}
+
+	if (Output.bSuccess && Output.StatusSnapshot.IsSet())
+	{
+		// Apply read-only state only after lock state is final: a checked-out or locked file
+		// must stay writable, and this ordering avoids briefly marking it read-only.
+		for (const FGitFileStatus& FileStatus : Output.StatusSnapshot.GetValue().Files)
+		{
+			if (!FileStatus.bIsTracked || !FileStatus.RelativePath.StartsWith(TEXT("Content/"), ESearchCase::IgnoreCase))
+			{
+				continue;
+			}
+
+			const FString Abs = FPaths::ConvertRelativePathToFull(RepoRoot / FileStatus.RelativePath);
+			const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
+			ApplyLocalReadOnlyState(Abs, !StateRef->IsCheckedOut() && !StateRef->IsConflicted());
+		}
 	}
 
 	if (Output.bSuccess && Output.FileHistoryByAbsoluteFile.Num() > 0 && RevisionMaterializer.IsValid())

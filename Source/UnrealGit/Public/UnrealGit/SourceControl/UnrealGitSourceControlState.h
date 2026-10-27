@@ -24,6 +24,12 @@ public:
 	void UpdateFromStatus(const FGitFileStatus& InStatus);
 	void SetLockState(EGitLockState InLockState, FString InLockOwner);
 	void SetCheckedOut(bool bInCheckedOut);
+
+	/** True when this file was checked out by the current user in this session. */
+	bool IsCheckedOutByMe() const
+	{
+		return bIsCheckedOutByMe;
+	}
 	void SetHistory(const TArray<TSharedRef<class ISourceControlRevision, ESPMode::ThreadSafe>>& InHistory);
 
 	// ISourceControlState

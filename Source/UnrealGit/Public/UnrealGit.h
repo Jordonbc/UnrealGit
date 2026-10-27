@@ -7,6 +7,7 @@
 
 DECLARE_LOG_CATEGORY_EXTERN(LogUnrealGit, Warning, Warning);
 
+class FAutoConsoleCommand;
 class FUnrealGitSourceControlProvider;
 
 class FUnrealGitModule final : public IModuleInterface
@@ -19,4 +20,5 @@ public:
 
 private:
 	TUniquePtr<FUnrealGitSourceControlProvider> Provider;
+	TUniquePtr<FAutoConsoleCommand> StatusCommand;
 };

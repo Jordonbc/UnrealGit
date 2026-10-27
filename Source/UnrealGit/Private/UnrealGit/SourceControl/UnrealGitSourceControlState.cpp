@@ -222,7 +222,8 @@ const FDateTime& FUnrealGitSourceControlState::GetTimeStamp() const
 
 bool FUnrealGitSourceControlState::CanCheckIn() const
 {
-	return CanRevert();
+	// Checked-out files are included so a submit can release the lock, even with no local changes.
+	return IsModified() || IsAdded() || IsDeleted() || IsConflicted() || bIsCheckedOutByMe || LockState == EGitLockState::LockedByMe;
 }
 
 bool FUnrealGitSourceControlState::CanCheckout() const
@@ -338,7 +339,8 @@ bool FUnrealGitSourceControlState::IsConflicted() const
 
 bool FUnrealGitSourceControlState::CanRevert() const
 {
-	return IsModified() || IsAdded() || IsDeleted() || IsConflicted();
+	// Clean checked-out/locked files are revertible so Revert can release the lock.
+	return CanCheckIn() || bIsCheckedOutByMe || LockState == EGitLockState::LockedByMe;
 }
 
 TOptional<FText> FUnrealGitSourceControlState::GetStatusText() const

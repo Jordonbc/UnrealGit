@@ -107,6 +107,9 @@ public:
 	 */
 	bool InitializeRepository(const FString& OriginUrl, bool bWriteGitIgnore, bool bWriteReadme, bool bWriteGitAttributes, bool bCreateInitialCommit, FText& OutError);
 
+	/** Prints provider/state diagnostics at Warning level (visible with the current log category settings). */
+	void LogDiagnostics();
+
 private:
 	struct FCommand;
 
@@ -145,6 +148,7 @@ private:
 
 	FDateTime NextLfsLocksRefreshUtc = FDateTime(0);
 	FDateTime NextPeriodicRefreshUtc = FDateTime(0);
+	int32 LastReportedLfsLockCount = -1;
 	bool bHasCachedLfsLocks = false;
 	TArray<struct FGitLfsLock> CachedLfsLocks;
 };

@@ -63,6 +63,47 @@ void FGitCheckInWorker::Execute(
 		}
 	}
 
+	// Submitting a checked-out file with no local changes only needs to release its lock.
+	bool bHasLocalChanges = true;
+	if (RelativePaths.Num() > 0)
+	{
+		bHasLocalChanges = false;
+		UnrealGit::Workers::ForEachPathBatch(RelativePaths, UnrealGit::Workers::MaxFilesPerCommand, [&](const TArray<FString>& Batch)
+		{
+			if (bHasLocalChanges)
+			{
+				return;
+			}
+
+			FGitProcessRequest StatusRequest;
+			StatusRequest.WorkingDirectory = FString();
+			StatusRequest.RepoRoot = RepoRoot;
+			StatusRequest.Arguments = { TEXT("status"), TEXT("--porcelain"), TEXT("-z"), TEXT("--") };
+			StatusRequest.Arguments.Append(Batch);
+
+			const FGitProcessResult StatusResult = ProcessRunner->Run(StatusRequest);
+			if (StatusResult.ExitCode == 0 && StatusResult.StdOut.Num() > 0)
+			{
+				bHasLocalChanges = true;
+			}
+		});
+	}
+
+	if (!bHasLocalChanges)
+	{
+		if (Settings.bEnableLfsLocks)
+		{
+			FString UnlockError;
+			UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, { TEXT("lfs"), TEXT("unlock") }, RelativePaths, UnlockError);
+		}
+
+		OutOutput.bSuccess = true;
+		OutOutput.RepoRoot = RepoRoot;
+		OutOutput.bShouldUpdateStatus = true;
+		OutOutput.FilesToUpdateStatus = Files;
+		return;
+	}
+
 	const FString TempDir = FPaths::Combine(FPaths::ProjectIntermediateDir(), TEXT("UnrealGit"));
 	IFileManager::Get().MakeDirectory(*TempDir, true);
 	FString MessageFile = FPaths::CreateTempFilename(*TempDir, TEXT("CommitMessage_"), TEXT(".txt"));
