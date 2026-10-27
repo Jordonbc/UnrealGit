@@ -213,8 +213,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 		}
 	}
 
-	UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: git completed: exit=%d, duration=%.3fs"), ExitCode, Result.Duration.GetTotalSeconds());
-
 	Result.Duration = FTimespan::FromSeconds(FPlatformTime::Seconds() - StartSeconds);
+	UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: git completed: exit=%d, duration=%.3fs"), ExitCode, Result.Duration.GetTotalSeconds());
 	return Result;
 }
