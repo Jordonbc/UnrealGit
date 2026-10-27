@@ -11,9 +11,8 @@
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitDeleteWorkerTest, "UnrealGit.Workers.Delete", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitDeleteWorkerTest::RunTest(const FString& Parameters)
+bool FUnrealGitDeleteWorkerTest::RunTest(const FString&)
 {
-	(void)Parameters;
 
 	const FString RepoRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
@@ -76,9 +75,8 @@ bool FUnrealGitDeleteWorkerTest::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitCopyWorkerTest, "UnrealGit.Workers.Copy", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitCopyWorkerTest::RunTest(const FString& Parameters)
+bool FUnrealGitCopyWorkerTest::RunTest(const FString&)
 {
-	(void)Parameters;
 
 	const FString RepoRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
@@ -139,9 +137,8 @@ bool FUnrealGitCopyWorkerTest::RunTest(const FString& Parameters)
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitResolveWorkerTest, "UnrealGit.Workers.Resolve", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
-bool FUnrealGitResolveWorkerTest::RunTest(const FString& Parameters)
+bool FUnrealGitResolveWorkerTest::RunTest(const FString&)
 {
-	(void)Parameters;
 
 	const FString RepoRoot = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 
