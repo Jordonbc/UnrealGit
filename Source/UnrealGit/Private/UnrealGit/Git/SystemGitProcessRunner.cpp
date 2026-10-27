@@ -187,7 +187,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 			Request.WorkingDirectory.IsEmpty() ? nullptr : *Request.WorkingDirectory,
 			StdOutWritePipe,
 			StdErrWritePipe);
-
+		
 		if (Handle.IsValid())
 		{
 			while (FPlatformProcess::IsProcRunning(Handle))
