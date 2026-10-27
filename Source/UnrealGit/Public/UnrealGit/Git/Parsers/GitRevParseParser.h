@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 
 /**
+ * @class FGitRevParseParser
  * Parses simple git plumbing outputs that are line oriented.
  *
  * This parser is deterministic and side-effect free.
@@ -17,6 +18,7 @@ public:
 	 *
 	 * @param StdOutText Stdout as text (expected UTF-8 converted to FString).
 	 * @param OutRepoRoot Absolute repository root path.
+	 * @return True on success, false otherwise.
 	 */
 	static bool ParseShowToplevel(const FString& StdOutText, FString& OutRepoRoot);
 };
