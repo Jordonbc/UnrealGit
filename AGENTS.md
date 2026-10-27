@@ -42,6 +42,14 @@ All agents must obey following principles.
 - `*.Build.cs`: keep dependency lists minimal; correct `Public` vs `Private` module lists.
 - Commit messages: short imperative summaries.
 
+## Standards and documented deviations
+
+
+- **Logging:** every plugin message uses `LogUnrealGit`, declared in `Source/UnrealGit/Public/UnrealGit.h`. Do not log plugin messages through the engine's `LogSourceControl`; that category is reserved for editor integration. The Lunaris `Source/Logging/Log.h` helpers are not linked into this plugin.
+- **Enums:** public enums use PascalCase enumerators (Epic Games standard) rather than the all-uppercase Lunaris style, so engine-facing types read like engine types.
+- **Tests:** existing suites use `IMPLEMENT_SIMPLE_AUTOMATION_TEST`; new multi-case suites should prefer `BEGIN_DEFINE_SPEC`. Tests drive `FMockGitProcessRunner` and must never invoke a real `git` binary or the network.
+- **Helper linkage:** prefer file-scope `static` over anonymous namespaces in new files; existing anonymous namespaces are tolerated (soft rule).
+
 ## General Rules
 
 - Follow [Epic Games C++ Coding Standard](https://dev.epicgames.com/documentation/en-us/unreal-engine/epic-cplusplus-coding-standard-for-unreal-engine) as primary reference
