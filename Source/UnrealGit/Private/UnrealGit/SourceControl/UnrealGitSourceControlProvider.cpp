@@ -132,7 +132,7 @@ struct FUnrealGitSourceControlProvider::FCommand final
 
 	TUniquePtr<IGitSourceControlWorker> Worker;
 	TFuture<FUnrealGitWorkerOutput> Future;
-	
+
 	FUnrealGitProviderSettings ProviderSettings;
 	bool bQueryLfsLocks = false;
 };
