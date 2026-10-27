@@ -7,7 +7,7 @@ public class UnrealGit : ModuleRules
 	public UnrealGit(ReadOnlyTargetRules Target) : base(Target)
 	{
 		PCHUsage = ModuleRules.PCHUsageMode.UseExplicitOrSharedPCHs;
-		
+
 		PublicDependencyModuleNames.AddRange(
 			new string[]
 			{
@@ -15,8 +15,8 @@ public class UnrealGit : ModuleRules
 				"SourceControl",
 			}
 			);
-			
-		
+
+
 		PrivateDependencyModuleNames.AddRange(
 			new string[]
 			{
@@ -36,6 +36,6 @@ public class UnrealGit : ModuleRules
 				"DesktopPlatform",
 			}
 			);
-		
+
 	}
 }
