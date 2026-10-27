@@ -4,6 +4,10 @@
 
 #include "UnrealGit/SourceControl/Workers/UnrealGitSourceControlWorkers.h"
 
+/**
+ * @class FGitRevertWorker
+ * Reverts the requested files to their committed state.
+ */
 class FGitRevertWorker final : public IGitSourceControlWorker
 {
 public:

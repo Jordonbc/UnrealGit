@@ -98,8 +98,13 @@ public:
 	 */
 	FString GetRepositoryRoot() const;
 
+	/** Current branch name reported by the last status snapshot. */
 	FString GetBranchName() const;
+
+	/** Remote origin URL discovered from the repository. */
 	FString GetRemoteUrl() const;
+
+	/** Last error text produced by the provider. */
 	FText GetLastError() const;
 
 	/**
@@ -150,24 +155,122 @@ private:
 	/** @struct FCommand Internal queued command entry. */
 	struct FCommand;
 
+	/**
+	 * Re-resolves runtime settings, validates the environment, and triggers a status refresh.
+	 */
 	void RefreshRepositoryState();
+
+	/**
+	 * Builds provider settings and the process runner from user/project settings.
+	 */
 	void ResolveRuntimeSettings();
+
+	/**
+	 * Stores validated environment info and updates git availability and user identity.
+	 *
+	 * @param Info Environment info produced by validation.
+	 */
 	void ApplyEnvironmentInfo(const FGitEnvironmentInfo& Info);
+
+	/**
+	 * Updates cached source control states from a parsed status snapshot.
+	 *
+	 * @param Snapshot Parsed git status snapshot.
+	 * @param RequestedFiles Files whose state should be updated.
+	 */
 	void UpdateStatesFromStatusSnapshot(const struct FGitStatusSnapshot& Snapshot, const TArray<FString>& RequestedFiles);
+
+	/**
+	 * Applies Git LFS lock ownership to cached states.
+	 *
+	 * @param Snapshot Optional status snapshot used for context.
+	 * @param Locks Parsed LFS locks.
+	 */
 	void ApplyLfsLocksToStates(const TOptional<struct FGitStatusSnapshot>& Snapshot, const TArray<struct FGitLfsLock>& Locks);
+
+	/**
+	 * Applies worker output to cached state and notifies the completion delegate.
+	 *
+	 * @param Operation Source control operation being reconciled.
+	 * @param Files Files affected by the operation.
+	 * @param Delegate Completion delegate to invoke.
+	 * @param Output Worker output to apply.
+	 */
 	void ReconcileWorkerOutput(const FSourceControlOperationRef& Operation, const TArray<FString>& Files, const FSourceControlOperationComplete& Delegate, const struct FUnrealGitWorkerOutput& Output);
 
+	/**
+	 * Applies a status snapshot from worker output to cached state.
+	 *
+	 * @param Operation Source control operation being applied.
+	 * @param Files Files affected by the operation.
+	 * @param Output Worker output containing the snapshot.
+	 * @param bAnyStateChanged Set to true when any cached state changed.
+	 */
 	void ApplyStatusSnapshot(const FSourceControlOperationRef& Operation, const TArray<FString>& Files, const FUnrealGitWorkerOutput& Output, bool& bAnyStateChanged);
+
+	/**
+	 * Applies lock state from worker output to cached state.
+	 *
+	 * @param Operation Source control operation being applied.
+	 * @param Files Files affected by the operation.
+	 * @param Output Worker output containing lock state.
+	 * @param bAnyStateChanged Set to true when any cached state changed.
+	 */
 	void ApplyLockState(const FSourceControlOperationRef& Operation, const TArray<FString>& Files, const FUnrealGitWorkerOutput& Output, bool& bAnyStateChanged);
+
+	/**
+	 * Applies read-only file policy based on worker output.
+	 *
+	 * @param Output Worker output containing policy-relevant data.
+	 */
 	void ApplyReadOnlyPolicy(const FUnrealGitWorkerOutput& Output);
+
+	/**
+	 * Builds revision history from worker output.
+	 *
+	 * @param Output Worker output containing history data.
+	 * @param bAnyStateChanged Set to true when any cached state changed.
+	 */
 	void BuildHistory(const FUnrealGitWorkerOutput& Output, bool& bAnyStateChanged);
+
+	/**
+	 * Notifies the completion delegate after reconciling worker output.
+	 *
+	 * @param Operation Source control operation being completed.
+	 * @param Delegate Completion delegate to invoke.
+	 * @param Output Worker output to report.
+	 * @param bAnyStateChanged Whether any cached state changed.
+	 */
 	void NotifyDelegate(const FSourceControlOperationRef& Operation, const FSourceControlOperationComplete& Delegate, const FUnrealGitWorkerOutput& Output, bool& bAnyStateChanged);
 
-	/** Applies checkout/lock state to the given files after a successful operation. */
+	/**
+	 * Applies checkout/lock state to the given files after a successful operation.
+	 *
+	 * @param Files Files to update.
+	 * @param bCheckedOut Whether the files are checked out.
+	 * @param LockState Lock state to apply.
+	 * @param bAnyStateChanged Set to true when any cached state changed.
+	 */
 	void ApplyOperationStateToFiles(const TArray<FString>& Files, bool bCheckedOut, EGitLockState LockState, bool& bAnyStateChanged);
 
+	/**
+	 * Returns an existing cached state for a file or creates one.
+	 *
+	 * @param AbsoluteFilename Absolute path of the file.
+	 * @return Cached source control state reference.
+	 */
 	FSourceControlStateRef GetOrCreateStateInternal(const FString& AbsoluteFilename);
+
+	/**
+	 * Returns the working directory hint used for repository discovery.
+	 *
+	 * @return Working directory path.
+	 */
 	FString GetWorkingDirectoryHint() const;
+
+	/**
+	 * Starts asynchronous environment validation.
+	 */
 	void StartEnvironmentValidation();
 
 private:

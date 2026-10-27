@@ -49,6 +49,11 @@ struct FGitResolveInfo final
 	FString RemoteRevision;
 	FString BaseRevision;
 
+	/**
+	 * Reports whether the resolve info contains at least one side of a merge conflict.
+	 *
+	 * @return True when either BaseFile or RemoteFile is non-empty.
+	 */
 	bool IsValid() const
 	{
 		return !BaseFile.IsEmpty() || !RemoteFile.IsEmpty();

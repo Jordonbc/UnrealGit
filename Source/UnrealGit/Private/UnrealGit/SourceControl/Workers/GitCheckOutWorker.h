@@ -4,6 +4,10 @@
 
 #include "UnrealGit/SourceControl/Workers/UnrealGitSourceControlWorkers.h"
 
+/**
+ * @class FGitCheckOutWorker
+ * Makes the requested files writable and acquires LFS locks when enabled.
+ */
 class FGitCheckOutWorker final : public IGitSourceControlWorker
 {
 public:

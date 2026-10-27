@@ -4,6 +4,10 @@
 
 #include "UnrealGit/SourceControl/Workers/UnrealGitSourceControlWorkers.h"
 
+/**
+ * @class FGitGetHistoryWorker
+ * Retrieves file revision history for the requested files.
+ */
 class FGitGetHistoryWorker final : public IGitSourceControlWorker
 {
 public:

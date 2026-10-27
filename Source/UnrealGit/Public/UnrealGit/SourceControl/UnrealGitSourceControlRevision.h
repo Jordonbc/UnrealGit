@@ -24,6 +24,16 @@ class IGitProcessRunner;
 class FUnrealGitSourceControlRevision final : public ISourceControlRevision
 {
 public:
+	/**
+	 * Creates a revision bound to a file and its git commit metadata.
+	 *
+	 * @param InAbsoluteFilename Absolute path of the file in the working tree.
+	 * @param InRepoRelativePath Repository-relative path at this revision.
+	 * @param InRevisionInfo Parsed commit metadata for this revision.
+	 * @param InRepoRoot Absolute repository root.
+	 * @param InProcessRunner Process runner used for materialization.
+	 * @param InMaterializer Materializer used to fetch file contents.
+	 */
 	FUnrealGitSourceControlRevision(
 		FString InAbsoluteFilename,
 		FString InRepoRelativePath,
@@ -67,8 +77,27 @@ private:
 		FString Error;
 	};
 
+	/**
+	 * Completes an in-flight materialization if it has finished.
+	 *
+	 * @param InOutFilename Receives the materialized file path on success.
+	 * @return True when materialization completed successfully.
+	 */
 	bool TryCompleteMaterialization(FString& InOutFilename) const;
+
+	/**
+	 * Starts asynchronous materialization of this revision's file contents.
+	 *
+	 * @return True when materialization was started successfully.
+	 */
 	bool StartMaterializationAsync() const;
+
+	/**
+	 * Materializes this revision's file contents synchronously.
+	 *
+	 * @param InOutFilename Receives the materialized file path on success.
+	 * @return True on success.
+	 */
 	bool MaterializeSync(FString& InOutFilename) const;
 
 private:

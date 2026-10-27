@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 
 /**
+ * @class FUnrealGitAssetContextMenuExtension
  * Adds a Force Unlock entry to the Content Browser's "Revision Control" submenu.
  *
  * Responsibility:
@@ -14,6 +15,9 @@
 class FUnrealGitAssetContextMenuExtension final
 {
 public:
+	/** Registers the context menu extension. */
 	static void Register();
+
+	/** Unregisters the context menu extension. */
 	static void Unregister();
 };

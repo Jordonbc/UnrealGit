@@ -4,6 +4,10 @@
 
 #include "UnrealGit/SourceControl/Workers/UnrealGitSourceControlWorkers.h"
 
+/**
+ * @class FGitForceUnlockWorker
+ * Force-unlocks Git LFS locks for the requested files, regardless of owner.
+ */
 class UNREALGIT_API FGitForceUnlockWorker final : public IGitSourceControlWorker
 {
 public:

@@ -13,6 +13,12 @@
 
 namespace UnrealGit::Workers
 {
+	/**
+	 * Decodes UTF-8 bytes into an FString, replacing invalid sequences lossily.
+	 *
+	 * @param Bytes UTF-8 bytes to decode.
+	 * @return The decoded string, or empty when Bytes is empty.
+	 */
 	inline FString BytesToTextUtf8Lossy(const TArray<uint8>& Bytes)
 	{
 		if (Bytes.Num() == 0)
@@ -24,6 +30,12 @@ namespace UnrealGit::Workers
 		return FString(Converter.Length(), Converter.Get());
 	}
 
+	/**
+	 * Splits a NUL-delimited byte buffer into a list of strings.
+	 *
+	 * @param Bytes NUL-delimited UTF-8 bytes.
+	 * @return The parsed (non-empty) segments.
+	 */
 	inline TArray<FString> ParseNullDelimitedList(const TArray<uint8>& Bytes)
 	{
 		TArray<FString> Results;
@@ -62,7 +74,15 @@ namespace UnrealGit::Workers
 		return Results;
 	}
 
-	/** Queries `git ls-files` and returns the tracked paths as a set. */
+	/**
+	 * Queries `git ls-files` and returns the tracked paths as a set.
+	 *
+	 * @param ProcessRunner Process runner used to invoke Git.
+	 * @param RepoRoot Repository root path.
+	 * @param RelativePaths Optional subset of paths to query (empty queries all).
+	 * @param OutTrackedPaths Receives the tracked paths.
+	 * @return True when the query succeeded.
+	 */
 	inline bool QueryTrackedPaths(
 		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
 		const FString& RepoRoot,
@@ -94,6 +114,15 @@ namespace UnrealGit::Workers
 		return true;
 	}
 
+	/**
+	 * Resolves the repository root from a working directory hint when not already known.
+	 *
+	 * @param ProcessRunner Process runner used to invoke Git.
+	 * @param WorkingDirectoryHint Directory to start searching from (defaults to project dir).
+	 * @param InOutRepoRoot Receives the resolved root; short-circuits when already populated.
+	 * @param OutError Optional error message on failure.
+	 * @return True when the repository root was resolved.
+	 */
 	inline bool EnsureRepoRoot(
 		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
 		const FString& WorkingDirectoryHint,
@@ -143,14 +172,28 @@ namespace UnrealGit::Workers
 		return false;
 	}
 
-	/** Normalizes path separators to forward slashes for git and lock-path comparisons. */
+	/**
+	 * Normalizes path separators to forward slashes for git and lock-path comparisons.
+	 *
+	 * @param Path Path to normalize.
+	 * @return The path with backslashes replaced by forward slashes.
+	 */
 	inline FString NormalizePathSeparators(FString Path)
 	{
 		Path.ReplaceInline(TEXT("\\"), TEXT("/"));
 		return Path;
 	}
 
-	/** Ensures a repo root is resolved, writing the standard error message into the worker output on failure. */
+	/**
+	 * Ensures a repo root is resolved, writing the standard error message into the worker output on failure.
+	 *
+	 * @param ProcessRunner Process runner used to invoke Git.
+	 * @param WorkingDirectoryHint Directory to start searching from.
+	 * @param InOutRepoRoot Receives the resolved root.
+	 * @param OutOutput Worker output populated with an error on failure.
+	 * @param DefaultErrorMessage Fallback error message when Git provides none.
+	 * @return True when the repository root was resolved.
+	 */
 	inline bool EnsureRepoRootOrFail(
 		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
 		const FString& WorkingDirectoryHint,
@@ -170,6 +213,14 @@ namespace UnrealGit::Workers
 		return false;
 	}
 
+	/**
+	 * Converts an absolute path into a path relative to the repository root.
+	 *
+	 * @param RepoRoot Repository root path.
+	 * @param AbsolutePath Absolute file path.
+	 * @param OutRelative Receives the repo-relative path on success.
+	 * @return True when the path lies inside the repository.
+	 */
 	inline bool TryMakeRepoRelativePath(const FString& RepoRoot, const FString& AbsolutePath, FString& OutRelative)
 	{
 		if (RepoRoot.IsEmpty())
@@ -210,7 +261,15 @@ namespace UnrealGit::Workers
 	 */
 	static constexpr int32 MaxFilesPerCommand = 50;
 
-	/** Converts absolute paths to repo-relative paths, failing on the first path outside the repository. */
+	/**
+	 * Converts absolute paths to repo-relative paths, failing on the first path outside the repository.
+	 *
+	 * @param RepoRoot Repository root path.
+	 * @param AbsolutePaths Absolute file paths.
+	 * @param OutRelativePaths Receives the repo-relative paths on success.
+	 * @param OutError Receives an error message on failure.
+	 * @return True when all paths lie inside the repository.
+	 */
 	inline bool TryMakeRepoRelativePaths(
 		const FString& RepoRoot,
 		const TArray<FString>& AbsolutePaths,
@@ -235,7 +294,13 @@ namespace UnrealGit::Workers
 		return true;
 	}
 
-	/** Invokes Func once per chunk of at most BatchSize paths. */
+	/**
+	 * Invokes Func once per chunk of at most BatchSize paths.
+	 *
+	 * @param Paths Paths to batch.
+	 * @param BatchSize Maximum paths per batch.
+	 * @param Func Callback receiving each batch.
+	 */
 	template <typename FuncType>
 	void ForEachPathBatch(const TArray<FString>& Paths, int32 BatchSize, FuncType&& Func)
 	{

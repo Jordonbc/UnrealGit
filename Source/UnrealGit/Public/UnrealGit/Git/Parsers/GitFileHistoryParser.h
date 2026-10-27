@@ -32,16 +32,41 @@ public:
 	/**
 	 * Parses the stdout of `git cat-file --batch-check` and fills FileSize for each
 	 * revision in OutRevisions, in order. Missing/ambiguous/empty responses leave 0.
+	 *
+	 * @param StdOut Raw stdout text from `git cat-file --batch-check`.
+	 * @param InOutRevisions Revisions whose FileSize fields are populated in place.
 	 */
 	static void ParseCatFileBatchCheckOutput(const FString& StdOut, TArray<FGitFileRevision>& InOutRevisions);
+
+	/**
+	 * Byte-safe overload of ParseCatFileBatchCheckOutput.
+	 *
+	 * @param StdOut Raw stdout bytes from `git cat-file --batch-check`.
+	 * @param InOutRevisions Revisions whose FileSize fields are populated in place.
+	 */
 	static void ParseCatFileBatchCheckOutput(const TArray<uint8>& StdOut, TArray<FGitFileRevision>& InOutRevisions);
 
-	/** Alias for ParseCatFileBatchCheckOutput (unit-test friendly). */
+	/**
+	 * Alias for ParseCatFileBatchCheckOutput (unit-test friendly).
+	 *
+	 * @param StdOut Raw stdout text from `git cat-file --batch-check`.
+	 * @param InOutRevisions Revisions whose FileSize fields are populated in place.
+	 */
 	static void ParseCatFileBatchCheck(const FString& StdOut, TArray<FGitFileRevision>& InOutRevisions);
 
-	/** Alias that fills a sizes array (one entry per response line). */
+	/**
+	 * Alias that fills a sizes array (one entry per response line).
+	 *
+	 * @param StdOut Raw stdout text from `git cat-file --batch-check`.
+	 * @param OutSizes Parsed file sizes, one entry per response line.
+	 */
 	static void ParseCatFileBatchCheck(const FString& StdOut, TArray<int32>& OutSizes);
 
-	/** Alias returning the parsed sizes. */
+	/**
+	 * Alias returning the parsed sizes.
+	 *
+	 * @param StdOut Raw stdout text from `git cat-file --batch-check`.
+	 * @return Parsed file sizes, one entry per response line.
+	 */
 	static TArray<int32> ParseCatFileBatchCheckSizes(const FString& StdOut);
 };

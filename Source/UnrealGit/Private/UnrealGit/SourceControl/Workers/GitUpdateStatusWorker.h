@@ -4,6 +4,10 @@
 
 #include "UnrealGit/SourceControl/Workers/UnrealGitSourceControlWorkers.h"
 
+/**
+ * @class FGitUpdateStatusWorker
+ * Refreshes file status, branch info, and LFS lock state for the repository.
+ */
 class FGitUpdateStatusWorker final : public IGitSourceControlWorker
 {
 public:

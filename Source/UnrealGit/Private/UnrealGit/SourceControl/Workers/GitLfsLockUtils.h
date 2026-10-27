@@ -17,6 +17,13 @@ namespace UnrealGit::Workers
 	 *
 	 * Path-based `git lfs unlock` re-resolves the lock itself and fails when that lookup
 	 * does not match; passing the ID is reliable. Paths without a lock are skipped.
+	 *
+	 * @param ProcessRunner Process runner used to invoke Git.
+	 * @param RepoRoot Repository root path.
+	 * @param RelativePaths Repo-relative paths to unlock.
+	 * @param bForce Whether to force-unlock.
+	 * @param OutError Receives an error message on failure.
+	 * @return True when all present locks were released.
 	 */
 	inline bool UnlockLfsLocks(
 		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,

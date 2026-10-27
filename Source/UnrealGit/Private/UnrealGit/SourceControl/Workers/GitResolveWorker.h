@@ -4,6 +4,10 @@
 
 #include "UnrealGit/SourceControl/Workers/UnrealGitSourceControlWorkers.h"
 
+/**
+ * @class FGitResolveWorker
+ * Marks merge conflicts as resolved by staging the requested files (`git add`).
+ */
 class UNREALGIT_API FGitResolveWorker final : public IGitSourceControlWorker
 {
 public:

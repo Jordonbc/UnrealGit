@@ -4,6 +4,10 @@
 
 #include "UnrealGit/SourceControl/Workers/UnrealGitSourceControlWorkers.h"
 
+/**
+ * @class FGitCopyWorker
+ * Stages the requested files for commit (`git add`).
+ */
 class UNREALGIT_API FGitCopyWorker final : public IGitSourceControlWorker
 {
 public:

@@ -4,6 +4,10 @@
 
 #include "UnrealGit/SourceControl/Workers/UnrealGitSourceControlWorkers.h"
 
+/**
+ * @class FGitMarkForAddWorker
+ * Stages the requested files for addition to the repository.
+ */
 class FGitMarkForAddWorker final : public IGitSourceControlWorker
 {
 public:

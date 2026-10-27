@@ -12,6 +12,16 @@
 
 namespace UnrealGit::Workers
 {
+	/**
+	 * Fetches the revision history for a single file.
+	 *
+	 * @param ProcessRunner Process runner used to invoke Git.
+	 * @param RepoRoot Repository root path.
+	 * @param AbsolutePath Absolute path of the file.
+	 * @param OutRevisions Receives parsed revisions (newest to oldest) with sizes filled.
+	 * @param OutError Receives an error message on failure.
+	 * @return True when history was fetched and parsed.
+	 */
 	inline bool FetchFileHistory(
 		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
 		const FString& RepoRoot,

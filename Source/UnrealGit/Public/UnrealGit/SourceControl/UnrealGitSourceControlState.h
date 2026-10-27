@@ -20,10 +20,33 @@
 class FUnrealGitSourceControlState final : public ISourceControlState
 {
 public:
+	/**
+	 * Creates state for a single file identified by its absolute path.
+	 *
+	 * @param InAbsoluteFilename Absolute path of the file.
+	 */
 	explicit FUnrealGitSourceControlState(FString InAbsoluteFilename);
 
+	/**
+	 * Updates this state from a parsed Git file status.
+	 *
+	 * @param InStatus Parsed status for the file.
+	 */
 	void UpdateFromStatus(const FGitFileStatus& InStatus);
+
+	/**
+	 * Sets the Git LFS lock state and owner for this file.
+	 *
+	 * @param InLockState Lock state to apply.
+	 * @param InLockOwner Name of the lock owner.
+	 */
 	void SetLockState(EGitLockState InLockState, FString InLockOwner);
+
+	/**
+	 * Marks whether this file is checked out in the current session.
+	 *
+	 * @param bInCheckedOut Checked-out flag.
+	 */
 	void SetCheckedOut(bool bInCheckedOut);
 
 	/** True when this file was checked out by the current user in this session. */
@@ -31,6 +54,11 @@ public:
 	{
 		return bIsCheckedOutByMe;
 	}
+	/**
+	 * Replaces the revision history for this file.
+	 *
+	 * @param InHistory Revisions to store, newest first.
+	 */
 	void SetHistory(const TArray<TSharedRef<class ISourceControlRevision, ESPMode::ThreadSafe>>& InHistory);
 
 	// ISourceControlState

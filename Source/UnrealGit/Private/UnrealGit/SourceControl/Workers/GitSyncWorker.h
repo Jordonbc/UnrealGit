@@ -4,6 +4,10 @@
 
 #include "UnrealGit/SourceControl/Workers/UnrealGitSourceControlWorkers.h"
 
+/**
+ * @class FGitSyncWorker
+ * Synchronizes the working tree with the remote (fetch/pull).
+ */
 class FGitSyncWorker final : public IGitSourceControlWorker
 {
 public:

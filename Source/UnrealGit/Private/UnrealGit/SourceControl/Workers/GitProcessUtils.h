@@ -11,6 +11,13 @@
 
 namespace UnrealGit::Workers
 {
+	/**
+	 * Builds a Git process request rooted at RepoRoot with the given arguments.
+	 *
+	 * @param RepoRoot Repository root path.
+	 * @param Arguments Git arguments.
+	 * @return The constructed request.
+	 */
 	inline FGitProcessRequest MakeGitRequest(const FString& RepoRoot, const TArray<FString>& Arguments)
 	{
 		FGitProcessRequest Request;
@@ -25,6 +32,13 @@ namespace UnrealGit::Workers
 	 * automatically batching them and separating them with "--".
 	 *
 	 * PrefixArguments must not include the "--" separator.
+	 *
+	 * @param ProcessRunner Process runner used to invoke Git.
+	 * @param RepoRoot Repository root path.
+	 * @param PrefixArguments Git subcommand and options (without "--").
+	 * @param RelativePaths Repo-relative paths to append.
+	 * @param OutError Receives an error message on failure.
+	 * @return True when all batches succeeded.
 	 */
 	inline bool RunGitWithBatchedPaths(
 		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
@@ -71,13 +85,25 @@ namespace UnrealGit::Workers
 		return bSucceeded;
 	}
 
-	/** Builds a worker error message from git's stderr. */
+	/**
+	 * Builds a worker error message from git's stderr.
+	 *
+	 * @param Result Git process result.
+	 * @return Trimmed stderr as FText.
+	 */
 	inline FText MakeGitErrorText(const FGitProcessResult& Result)
 	{
 		return FText::FromString(BytesToTextUtf8Lossy(Result.StdErr).TrimStartAndEnd());
 	}
 
-	/** Fills the standard successful worker output (repo root + status refresh). */
+	/**
+	 * Fills the standard successful worker output (repo root + status refresh).
+	 *
+	 * @param OutOutput Worker output to populate.
+	 * @param RepoRoot Repository root path.
+	 * @param Files Files to refresh status for.
+	 * @param bShouldUpdateStatus Whether status should be refreshed.
+	 */
 	inline void CompleteWorkerSuccess(
 		FUnrealGitWorkerOutput& OutOutput,
 		const FString& RepoRoot,
@@ -93,6 +119,13 @@ namespace UnrealGit::Workers
 	/**
 	 * Converts absolute paths to repo-relative, runs the given git subcommand in
 	 * batched invocations, and maps any conversion or git failure into OutOutput.
+	 *
+	 * @param ProcessRunner Process runner used to invoke Git.
+	 * @param RepoRoot Repository root path.
+	 * @param PrefixArgs Git subcommand and options.
+	 * @param Files Absolute file paths.
+	 * @param OutOutput Worker output populated on failure.
+	 * @return True when conversion and all batches succeeded.
 	 */
 	inline bool RunGitForFiles(
 		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,

@@ -21,6 +21,11 @@ class IGitProcessRunner;
 class UNREALGIT_API FGitRevisionMaterializer final : public TSharedFromThis<FGitRevisionMaterializer, ESPMode::ThreadSafe>
 {
 public:
+	/**
+	 * Creates a materializer that stores temporary files under the given session root directory.
+	 *
+	 * @param InSessionRootDirectory Absolute directory used as the root for materialized temp files.
+	 */
 	explicit FGitRevisionMaterializer(FString InSessionRootDirectory);
 	~FGitRevisionMaterializer();
 

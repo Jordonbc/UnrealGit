@@ -6,6 +6,7 @@
 #include "SourceControlOperations.h"
 
 /**
+ * @class FUnrealGitForceUnlockOperation
  * Force unlock operation for Git LFS.
  *
  * Unlocks a lock owned by any user (requires permission on the remote). This is the

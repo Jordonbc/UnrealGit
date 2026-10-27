@@ -4,6 +4,10 @@
 
 #include "UnrealGit/SourceControl/Workers/UnrealGitSourceControlWorkers.h"
 
+/**
+ * @class FGitDeleteWorker
+ * Removes the requested files from the index and working tree (`git rm --ignore-unmatch`).
+ */
 class UNREALGIT_API FGitDeleteWorker final : public IGitSourceControlWorker
 {
 public:
