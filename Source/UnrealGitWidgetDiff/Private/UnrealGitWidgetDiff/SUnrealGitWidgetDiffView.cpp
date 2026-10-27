@@ -3,11 +3,17 @@
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/SUnrealGitWidgetDiffView.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetTree.h"
+#include "DetailCategoryBuilder.h"
+#include "DetailLayoutBuilder.h"
+#include "DetailWidgetRow.h"
 #include "Editor.h"
 #include "Engine/Texture2D.h"
-#include "Framework/Application/SlateApplication.h"
 #include "Framework/MultiBox/MultiBoxBuilder.h"
-#include "HAL/PlatformApplicationMisc.h"
+#include "IDetailCustomization.h"
+#include "IDetailPropertyRow.h"
+#include "IDetailsView.h"
+#include "PropertyEditorModule.h"
 #include "Styling/AppStyle.h"
 #include "WidgetBlueprint.h"
 #include "WidgetBlueprintEditorUtils.h"
@@ -50,7 +56,7 @@ SUnrealGitWidgetDiffView::~SUnrealGitWidgetDiffView()
 		DockManager->UnregisterTabSpawner(TEXT("UnrealGitWidgetDiff.Hierarchy"));
 		DockManager->UnregisterTabSpawner(TEXT("UnrealGitWidgetDiff.Viewer"));
 		DockManager->UnregisterTabSpawner(TEXT("UnrealGitWidgetDiff.Changes"));
-		DockManager->UnregisterTabSpawner(TEXT("UnrealGitWidgetDiff.Properties"));
+		DockManager->UnregisterTabSpawner(TEXT("UnrealGitWidgetDiff.Details"));
 		DockManager.Reset();
 	}
 
@@ -81,11 +87,10 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 	PreviewModeOptions.Add(MakeShared<FString>(TEXT("Custom 800x600")));
 	CurrentPreviewModeOption = PreviewModeOptions[0];
 
-	InspectorEmptyMessage = LOCTEXT("InspectorNoSelection", "Select a widget to inspect its property changes.");
-
 	if (InArgs._OwnerTab.IsValid())
 	{
 		DockManager = FGlobalTabmanager::Get()->NewTabManager(InArgs._OwnerTab.Pin().ToSharedRef());
+		CreateDetailsViews();
 		RegisterDockSpawners();
 	}
 
@@ -258,10 +263,10 @@ void SUnrealGitWidgetDiffView::FillWindowMenu(FMenuBuilder& MenuBuilder)
 		FSlateIcon(),
 		FUIAction(FExecuteAction::CreateSP(this, &SUnrealGitWidgetDiffView::ShowDockTab, FName(TEXT("UnrealGitWidgetDiff.Changes")))));
 	MenuBuilder.AddMenuEntry(
-		LOCTEXT("WindowProperties", "Properties"),
+		LOCTEXT("WindowDetails", "Details"),
 		FText::GetEmpty(),
 		FSlateIcon(),
-		FUIAction(FExecuteAction::CreateSP(this, &SUnrealGitWidgetDiffView::ShowDockTab, FName(TEXT("UnrealGitWidgetDiff.Properties")))));
+		FUIAction(FExecuteAction::CreateSP(this, &SUnrealGitWidgetDiffView::ShowDockTab, FName(TEXT("UnrealGitWidgetDiff.Details")))));
 	MenuBuilder.EndSection();
 
 	MenuBuilder.AddMenuEntry(
@@ -581,8 +586,8 @@ void SUnrealGitWidgetDiffView::RegisterDockSpawners()
 		.SetDisplayName(LOCTEXT("DockTabViewer", "Viewer"));
 	DockManager->RegisterTabSpawner(TEXT("UnrealGitWidgetDiff.Changes"), FOnSpawnTab::CreateSP(this, &SUnrealGitWidgetDiffView::SpawnChangesTab))
 		.SetDisplayName(LOCTEXT("DockTabChanges", "Changes"));
-	DockManager->RegisterTabSpawner(TEXT("UnrealGitWidgetDiff.Properties"), FOnSpawnTab::CreateSP(this, &SUnrealGitWidgetDiffView::SpawnPropertiesTab))
-		.SetDisplayName(LOCTEXT("DockTabProperties", "Properties"));
+	DockManager->RegisterTabSpawner(TEXT("UnrealGitWidgetDiff.Details"), FOnSpawnTab::CreateSP(this, &SUnrealGitWidgetDiffView::SpawnDetailsTab))
+		.SetDisplayName(LOCTEXT("DockTabDetails", "Details"));
 }
 
 void SUnrealGitWidgetDiffView::ResetDockLayout()
@@ -619,7 +624,7 @@ TSharedRef<FTabManager::FLayout> SUnrealGitWidgetDiffView::MakeDefaultLayout()
 			(
 				FTabManager::NewStack()
 				->SetSizeCoefficient(0.25f)
-				->AddTab(TEXT("UnrealGitWidgetDiff.Properties"), ETabState::OpenedTab)
+				->AddTab(TEXT("UnrealGitWidgetDiff.Details"), ETabState::OpenedTab)
 				->AddTab(TEXT("UnrealGitWidgetDiff.Changes"), ETabState::OpenedTab)
 			)
 		);
@@ -652,230 +657,272 @@ TSharedRef<SDockTab> SUnrealGitWidgetDiffView::SpawnChangesTab(const FSpawnTabAr
 		];
 }
 
-TSharedRef<SDockTab> SUnrealGitWidgetDiffView::SpawnPropertiesTab(const FSpawnTabArgs&)
+TSharedRef<SDockTab> SUnrealGitWidgetDiffView::SpawnDetailsTab(const FSpawnTabArgs&)
 {
 	return SNew(SDockTab)
 		.TabRole(ETabRole::PanelTab)
 		[
-			BuildPropertyInspector()
+			BuildDetailsPanel()
 		];
 }
 
-TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildPropertyInspector()
+namespace UnrealGitWidgetDiffDetails
 {
-	const FLinearColor HeaderColor(0.6f, 0.6f, 0.6f, 1.0f);
+	/**
+	 * @class FChangedPropertyCustomization
+	 * Wraps properties that differ between the two revisions in an orange border
+	 * inside the native read-only details views.
+	 */
+	class FChangedPropertyCustomization : public IDetailCustomization
+	{
+	public:
+		/**
+		 * @param InChangedRoots Top-level property names that changed.
+		 */
+		explicit FChangedPropertyCustomization(TSharedPtr<TSet<FName>> InChangedRoots)
+			: ChangedRoots(MoveTemp(InChangedRoots))
+		{
+		}
 
-	return
-		SNew(SBorder)
-		.Padding(4.0f)
-		[
-			SNew(SVerticalBox)
+		/**
+		 * @param InChangedRoots Top-level property names that changed.
+		 * @return New customization instance.
+		 */
+		static TSharedRef<IDetailCustomization> MakeInstance(TSharedPtr<TSet<FName>> InChangedRoots)
+		{
+			return MakeShared<FChangedPropertyCustomization>(MoveTemp(InChangedRoots));
+		}
+
+		virtual void CustomizeDetails(IDetailLayoutBuilder& DetailBuilder) override
+		{
+			if (!ChangedRoots.IsValid() || ChangedRoots->Num() == 0)
+			{
+				return;
+			}
+
+			TArray<TWeakObjectPtr<UObject>> Objects;
+			DetailBuilder.GetObjectsBeingCustomized(Objects);
+			UWidget* Widget = Objects.Num() > 0 ? Cast<UWidget>(Objects[0].Get()) : nullptr;
+			if (!Widget)
+			{
+				return;
+			}
+
+			for (const FName& PropertyName : *ChangedRoots)
+			{
+				const FProperty* Property = Widget->GetClass()->FindPropertyByName(PropertyName);
+				if (!Property)
+				{
+					continue;
+				}
+
+				const FString CategoryName = Property->GetMetaData(FName(TEXT("Category")));
+				if (CategoryName.IsEmpty())
+				{
+					continue;
+				}
+
+				IDetailCategoryBuilder& Category = DetailBuilder.EditCategory(FName(*CategoryName));
+				IDetailPropertyRow& Row = Category.AddProperty(PropertyName);
+
+				TSharedPtr<SWidget> NameWidget;
+				TSharedPtr<SWidget> ValueWidget;
+				Row.GetDefaultWidgets(NameWidget, ValueWidget);
+				if (!NameWidget.IsValid() || !ValueWidget.IsValid())
+				{
+					continue;
+				}
+
+				Row.CustomWidget()
+					.NameContent()
+					[
+						NameWidget.ToSharedRef()
+					]
+					.ValueContent()
+					[
+						SNew(SBorder)
+						.BorderBackgroundColor(FLinearColor(0.95f, 0.55f, 0.10f, 1.0f))
+						.Padding(1.0f)
+						[
+							ValueWidget.ToSharedRef()
+						]
+					];
+			}
+		}
+
+	private:
+		TSharedPtr<TSet<FName>> ChangedRoots;
+	};
+}
+
+void SUnrealGitWidgetDiffView::CreateDetailsViews()
+{
+	FPropertyEditorModule& PropertyEditorModule = FModuleManager::LoadModuleChecked<FPropertyEditorModule>(TEXT("PropertyEditor"));
+
+	FDetailsViewArgs DetailsArgs;
+	DetailsArgs.bAllowSearch = true;
+	DetailsArgs.bHideSelectionTip = true;
+	DetailsArgs.bShowOptions = false;
+	DetailsArgs.bShowObjectLabel = false;
+	DetailsArgs.bShowModifiedPropertiesOption = false;
+	DetailsArgs.bShowDifferingPropertiesOption = false;
+	DetailsArgs.NameAreaSettings = FDetailsViewArgs::HideNameArea;
+	DetailsArgs.DefaultsOnlyVisibility = EEditDefaultsOnlyNodeVisibility::Hide;
+
+	LeftDetailsView = PropertyEditorModule.CreateDetailView(DetailsArgs);
+	RightDetailsView = PropertyEditorModule.CreateDetailView(DetailsArgs);
+
+	const FIsPropertyEditingEnabled ReadOnlyEditing = FIsPropertyEditingEnabled::CreateLambda([]()
+	{
+		return false;
+	});
+	const FIsPropertyReadOnly ReadOnlyProperty = FIsPropertyReadOnly::CreateLambda([](const FPropertyAndParent&)
+	{
+		return true;
+	});
+
+	LeftDetailsView->SetIsPropertyEditingEnabledDelegate(ReadOnlyEditing);
+	RightDetailsView->SetIsPropertyEditingEnabledDelegate(ReadOnlyEditing);
+	LeftDetailsView->SetIsPropertyReadOnlyDelegate(ReadOnlyProperty);
+	RightDetailsView->SetIsPropertyReadOnlyDelegate(ReadOnlyProperty);
+}
+
+TSharedRef<SWidget> SUnrealGitWidgetDiffView::BuildDetailsPanel()
+{
+	auto BuildSide = [](const TSharedPtr<IDetailsView>& DetailsView, const FText& Label) -> TSharedRef<SWidget>
+	{
+		if (!DetailsView.IsValid())
+		{
+			return SNew(STextBlock).Text(LOCTEXT("DetailsUnavailable", "Details view unavailable."));
+		}
+
+		return SNew(SVerticalBox)
 			+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)
 			[
-				SNew(STextBlock)
-				.Text_Lambda([this]() { return GetInspectorHeaderText(); })
-			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().AutoWidth().Padding(2.0f, 0.0f)
-				[ SNew(SBox).WidthOverride(18.0f) ]
-				+ SHorizontalBox::Slot().FillWidth(0.44f).Padding(2.0f, 0.0f)
-				[ SNew(STextBlock).Text(LOCTEXT("InspectorProperty", "Property")).ColorAndOpacity(FSlateColor(HeaderColor)) ]
-				+ SHorizontalBox::Slot().FillWidth(0.28f).Padding(2.0f, 0.0f)
-				[ SNew(STextBlock).Text(LOCTEXT("InspectorBefore", "Before")).ColorAndOpacity(FSlateColor(HeaderColor)) ]
-				+ SHorizontalBox::Slot().FillWidth(0.28f).Padding(2.0f, 0.0f)
-				[ SNew(STextBlock).Text(LOCTEXT("InspectorAfter", "After")).ColorAndOpacity(FSlateColor(HeaderColor)) ]
+				SNew(STextBlock).Text(Label)
 			]
 			+ SVerticalBox::Slot().FillHeight(1.0f)
 			[
-				SAssignNew(InspectorList, SListView<TSharedPtr<FUnrealGitPropertyDiff>>)
-				.ListItemsSource(&InspectorItems)
-				.OnGenerateRow(this, &SUnrealGitWidgetDiffView::OnGenerateInspectorRow)
-				.Visibility_Lambda([this]() { return GetInspectorListVisibility(); })
-			]
-			+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)
-			[
-				SNew(STextBlock)
-				.Text_Lambda([this]() { return InspectorEmptyMessage; })
-				.AutoWrapText(true)
-				.ColorAndOpacity(FSlateColor(HeaderColor))
-				.Visibility_Lambda([this]() { return GetInspectorListVisibility() == EVisibility::Visible ? EVisibility::Collapsed : EVisibility::Visible; })
-			]
+				DetailsView->AsShared()
+			];
+	};
+
+	return
+		SNew(SVerticalBox)
+		+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)
+		[
+			SNew(STextBlock).Text_Lambda([this]() { return GetInspectorHeaderText(); })
 		]
-	;
+		+ SVerticalBox::Slot().FillHeight(1.0f)
+		[
+			SNew(SSplitter)
+			.Orientation(Orient_Horizontal)
+			+ SSplitter::Slot().Value(0.5f)
+			[
+				BuildSide(LeftDetailsView, FText::Format(LOCTEXT("DetailsBefore", "Before - {0}"), GetLeftLabel()))
+			]
+			+ SSplitter::Slot().Value(0.5f)
+			[
+				BuildSide(RightDetailsView, FText::Format(LOCTEXT("DetailsAfter", "After - {0}"), GetRightLabel()))
+			]
+		];
+}
+
+UWidget* SUnrealGitWidgetDiffView::ResolveWidgetForBlueprint(const UWidgetBlueprint* Blueprint, const FString& Name) const
+{
+	if (!Blueprint || !Blueprint->WidgetTree || Name.IsEmpty())
+	{
+		return nullptr;
+	}
+
+	return Blueprint->WidgetTree->FindWidget(FName(*Name));
+}
+
+void SUnrealGitWidgetDiffView::ApplyDetailsCustomization(const TSharedPtr<IDetailsView>& View, TWeakObjectPtr<UClass>& CustomizedClass, UClass* WidgetClass)
+{
+	if (!View.IsValid())
+	{
+		return;
+	}
+
+	if (CustomizedClass.IsValid())
+	{
+		View->UnregisterInstancedCustomPropertyLayout(CustomizedClass.Get());
+		CustomizedClass.Reset();
+	}
+
+	if (!WidgetClass)
+	{
+		return;
+	}
+
+	TSharedPtr<TSet<FName>> Roots = DetailsChangedRoots;
+	View->RegisterInstancedCustomPropertyLayout(WidgetClass, FOnGetDetailCustomizationInstance::CreateLambda([Roots]()
+	{
+		return UnrealGitWidgetDiffDetails::FChangedPropertyCustomization::MakeInstance(Roots);
+	}));
+	CustomizedClass = WidgetClass;
+}
+
+void SUnrealGitWidgetDiffView::RefreshDetailsViews(const FUnrealGitWidgetNode* Node)
+{
+	DetailsChangedRoots = MakeShared<TSet<FName>>();
+	if (Node)
+	{
+		for (const FUnrealGitPropertyDiff& Difference : Node->PropertyDiffs)
+		{
+			int32 CutIndex = Difference.Path.Len();
+			int32 DotIndex = INDEX_NONE;
+			if (Difference.Path.FindChar(TEXT('.'), DotIndex))
+			{
+				CutIndex = FMath::Min(CutIndex, DotIndex);
+			}
+			int32 BracketIndex = INDEX_NONE;
+			if (Difference.Path.FindChar(TEXT('['), BracketIndex))
+			{
+				CutIndex = FMath::Min(CutIndex, BracketIndex);
+			}
+
+			const FString RootProperty = Difference.Path.Left(CutIndex);
+			if (!RootProperty.IsEmpty() && RootProperty != TEXT("Slot"))
+			{
+				DetailsChangedRoots->Add(FName(*RootProperty));
+			}
+		}
+	}
+
+	const UUnrealGitWidgetDiffImages* Images = Session.IsValid() ? Session->GetImages() : nullptr;
+	const FString WidgetName = Node ? Node->Name : FString();
+	UWidget* LeftWidget = Images ? ResolveWidgetForBlueprint(Images->LeftBlueprint, WidgetName) : nullptr;
+	UWidget* RightWidget = Images ? ResolveWidgetForBlueprint(Images->RightBlueprint, WidgetName) : nullptr;
+
+	ApplyDetailsCustomization(LeftDetailsView, LeftDetailsCustomizedClass, LeftWidget ? LeftWidget->GetClass() : nullptr);
+	ApplyDetailsCustomization(RightDetailsView, RightDetailsCustomizedClass, RightWidget ? RightWidget->GetClass() : nullptr);
+
+	if (LeftDetailsView.IsValid())
+	{
+		LeftDetailsView->SetObject(LeftWidget);
+	}
+	if (RightDetailsView.IsValid())
+	{
+		RightDetailsView->SetObject(RightWidget);
+	}
 }
 
 FText SUnrealGitWidgetDiffView::GetInspectorHeaderText() const
 {
 	if (InspectorWidgetName.IsEmpty())
 	{
-		return LOCTEXT("InspectorTitle", "Property Changes");
+		return LOCTEXT("InspectorTitle", "Property Details");
 	}
-	if (InspectorItems.Num() == 0)
-	{
-		return FText::Format(LOCTEXT("InspectorTitleForWidget", "Property Changes - {0}"), FText::FromString(InspectorWidgetName));
-	}
-	return FText::Format(
-		LOCTEXT("InspectorTitleForWidgetWithCount", "Property Changes - {0} ({1})"),
-		FText::FromString(InspectorWidgetName),
-		FText::AsNumber(InspectorItems.Num()));
-}
-
-EVisibility SUnrealGitWidgetDiffView::GetInspectorListVisibility() const
-{
-	return InspectorItems.Num() > 0 ? EVisibility::Visible : EVisibility::Collapsed;
+	return FText::Format(LOCTEXT("InspectorTitleForWidget", "Property Details - {0}"), FText::FromString(InspectorWidgetName));
 }
 
 void SUnrealGitWidgetDiffView::RefreshInspector(const FUnrealGitWidgetNode* Node)
 {
-	InspectorItems.Reset();
-	InspectorWidgetName.Reset();
-
-	if (!Node)
-	{
-		InspectorEmptyMessage = LOCTEXT("InspectorNoSelection", "Select a widget to inspect its property changes.");
-	}
-	else
-	{
-		InspectorWidgetName = Node->Name;
-
-		if (Node->Change == EUnrealGitWidgetChange::Added)
-		{
-			InspectorEmptyMessage = LOCTEXT("InspectorAddedWidget", "This widget was added; there is no historical value to compare.");
-		}
-		else if (Node->Change == EUnrealGitWidgetChange::Removed)
-		{
-			InspectorEmptyMessage = LOCTEXT("InspectorRemovedWidget", "This widget was removed; there is no current value to compare.");
-		}
-		else
-		{
-			InspectorEmptyMessage = LOCTEXT("InspectorNoDifferences", "No property differences for this widget.");
-			for (const FUnrealGitPropertyDiff& Difference : Node->PropertyDiffs)
-			{
-				InspectorItems.Add(MakeShared<FUnrealGitPropertyDiff>(Difference));
-			}
-		}
-	}
-
-	if (InspectorList.IsValid())
-	{
-		InspectorList->RequestListRefresh();
-	}
+	InspectorWidgetName = Node ? Node->Name : FString();
+	RefreshDetailsViews(Node);
 	Invalidate(EInvalidateWidget::Paint);
-}
-
-TSharedRef<ITableRow> SUnrealGitWidgetDiffView::OnGenerateInspectorRow(TSharedPtr<FUnrealGitPropertyDiff> Item, const TSharedRef<STableViewBase>& OwnerTable)
-{
-	FLinearColor Color(0.75f, 0.75f, 0.75f, 1.0f);
-	FString Glyph(TEXT("~"));
-	if (Item.IsValid())
-	{
-		Color = GetChangeColor(Item->Change);
-		Glyph = GetChangeGlyph(Item->Change);
-	}
-
-	auto MakeValueCell = [](const FString& Value) -> TSharedRef<SWidget>
-	{
-		return SNew(STextBlock)
-			.Text(FText::FromString(Value))
-			.ToolTipText(FText::FromString(Value))
-			.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
-			.ColorAndOpacity(FSlateColor(FLinearColor(0.72f, 0.72f, 0.72f, 1.0f)));
-	};
-
-	const FString Path = Item.IsValid() ? Item->Path : FString();
-	const FString PathTooltip = Item.IsValid() && !Item->Category.IsEmpty()
-		? FString::Printf(TEXT("%s\nCategory: %s"), *Path, *Item->Category)
-		: Path;
-
-	return SNew(STableRow<TSharedPtr<FUnrealGitPropertyDiff>>, OwnerTable)
-	[
-		SNew(SBorder)
-		.Padding(2.0f)
-		.OnMouseButtonUp_Lambda([this, Item](const FGeometry&, const FPointerEvent& Event)
-		{
-			if (Event.GetEffectingButton() == EKeys::RightMouseButton && Item.IsValid())
-			{
-				ShowInspectorContextMenu(Item, Event.GetScreenSpacePosition());
-				return FReply::Handled();
-			}
-			return FReply::Unhandled();
-		})
-		[
-			SNew(SHorizontalBox)
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(2.0f)
-			[
-				SNew(SBorder)
-				.BorderBackgroundColor(Color)
-				.Padding(3.0f)
-				[ SNew(STextBlock).Text(FText::FromString(Glyph)) ]
-			]
-			+ SHorizontalBox::Slot().FillWidth(0.44f).VAlign(VAlign_Center).Padding(2.0f, 0.0f)
-			[
-				SNew(STextBlock)
-				.Text(FText::FromString(Path))
-				.ToolTipText(FText::FromString(PathTooltip))
-				.OverflowPolicy(ETextOverflowPolicy::Ellipsis)
-				.ColorAndOpacity(FSlateColor(Color))
-			]
-			+ SHorizontalBox::Slot().FillWidth(0.28f).VAlign(VAlign_Center).Padding(2.0f, 0.0f)
-			[ MakeValueCell(Item.IsValid() ? Item->Before : FString()) ]
-			+ SHorizontalBox::Slot().FillWidth(0.28f).VAlign(VAlign_Center).Padding(2.0f, 0.0f)
-			[ MakeValueCell(Item.IsValid() ? Item->After : FString()) ]
-		]
-	];
-}
-
-void SUnrealGitWidgetDiffView::ShowInspectorContextMenu(TSharedPtr<FUnrealGitPropertyDiff> Item, const FVector2D& ScreenPosition)
-{
-	if (!Item.IsValid())
-	{
-		return;
-	}
-
-	FMenuBuilder MenuBuilder(true, nullptr);
-	MenuBuilder.BeginSection(NAME_None, LOCTEXT("InspectorCopySection", "Copy"));
-	MenuBuilder.AddMenuEntry(
-		LOCTEXT("InspectorCopyPath", "Copy Property Path"),
-		FText::GetEmpty(),
-		FSlateIcon(),
-		FUIAction(FExecuteAction::CreateLambda([Path = Item->Path]()
-		{
-			FPlatformApplicationMisc::ClipboardCopy(*Path);
-		})));
-	MenuBuilder.AddMenuEntry(
-		LOCTEXT("InspectorCopyBefore", "Copy Before Value"),
-		FText::GetEmpty(),
-		FSlateIcon(),
-		FUIAction(FExecuteAction::CreateLambda([Before = Item->Before]()
-		{
-			FPlatformApplicationMisc::ClipboardCopy(*Before);
-		})));
-	MenuBuilder.AddMenuEntry(
-		LOCTEXT("InspectorCopyAfter", "Copy After Value"),
-		FText::GetEmpty(),
-		FSlateIcon(),
-		FUIAction(FExecuteAction::CreateLambda([After = Item->After]()
-		{
-			FPlatformApplicationMisc::ClipboardCopy(*After);
-		})));
-	MenuBuilder.AddMenuEntry(
-		LOCTEXT("InspectorCopyRow", "Copy Row"),
-		FText::GetEmpty(),
-		FSlateIcon(),
-		FUIAction(FExecuteAction::CreateLambda([Row = FString::Printf(TEXT("%s: %s -> %s"), *Item->Path, *Item->Before, *Item->After)]()
-		{
-			FPlatformApplicationMisc::ClipboardCopy(*Row);
-		})));
-	MenuBuilder.EndSection();
-
-	FSlateApplication::Get().PushMenu(
-		AsShared(),
-		FWidgetPath(),
-		MenuBuilder.MakeWidget(),
-		ScreenPosition,
-		FPopupTransitionEffect::ContextMenu);
 }
 
 void SUnrealGitWidgetDiffView::WireSession()

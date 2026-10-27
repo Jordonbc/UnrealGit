@@ -12,6 +12,7 @@
 class SDockTab;
 class FMenuBuilder;
 class FSpawnTabArgs;
+class IDetailsView;
 
 /**
  * @class SUnrealGitWidgetDiffView
@@ -127,13 +128,42 @@ private:
 	TSharedRef<SWidget> BuildHierarchyPanel();
 	/** @return Summary panel widget. */
 	TSharedRef<SWidget> BuildSummaryPanel();
-	/** @return Property-difference inspector panel widget. */
-	TSharedRef<SWidget> BuildPropertyInspector();
 
 	/** Restored dock area hosting the draggable panel tabs. */
 	TSharedPtr<class SBox> DockHost;
 	/** Nested tab manager that owns the panel layout. */
 	TSharedPtr<FTabManager> DockManager;
+	/** Native read-only details views for the historical and current revisions. */
+	TSharedPtr<IDetailsView> LeftDetailsView;
+	TSharedPtr<IDetailsView> RightDetailsView;
+	/** Top-level property names that should be boxed in the details views. */
+	TSharedPtr<TSet<FName>> DetailsChangedRoots;
+	/** Widget classes currently customised on each details view. */
+	TWeakObjectPtr<UClass> LeftDetailsCustomizedClass;
+	TWeakObjectPtr<UClass> RightDetailsCustomizedClass;
+	/** Creates the read-only details views. */
+	void CreateDetailsViews();
+	/**
+	 * Applies the changed-property highlighting customisation for a widget class.
+	 * @param View Details view to configure.
+	 * @param CustomizedClass Currently customised class for that view; updated in place.
+	 * @param WidgetClass Class of the widget now shown, or null.
+	 */
+	void ApplyDetailsCustomization(const TSharedPtr<IDetailsView>& View, TWeakObjectPtr<UClass>& CustomizedClass, UClass* WidgetClass);
+	/** @return Details panel showing both revisions side by side. */
+	TSharedRef<SWidget> BuildDetailsPanel();
+	/**
+	 * Updates both details views for the selected node.
+	 * @param Node Selected node, or null.
+	 */
+	void RefreshDetailsViews(const FUnrealGitWidgetNode* Node);
+	/**
+	 * Finds a widget template inside a revision blueprint.
+	 * @param Blueprint Blueprint to search.
+	 * @param Name Widget name.
+	 * @return Widget template, or null when unavailable.
+	 */
+	class UWidget* ResolveWidgetForBlueprint(const class UWidgetBlueprint* Blueprint, const FString& Name) const;
 	/** Registers the panel tab spawners with the nested tab manager. */
 	void RegisterDockSpawners();
 	/** Restores the default dock layout, reopening closed panels. */
@@ -143,7 +173,7 @@ private:
 	TSharedRef<SDockTab> SpawnHierarchyTab(const FSpawnTabArgs& Args);
 	TSharedRef<SDockTab> SpawnViewerTab(const FSpawnTabArgs& Args);
 	TSharedRef<SDockTab> SpawnChangesTab(const FSpawnTabArgs& Args);
-	TSharedRef<SDockTab> SpawnPropertiesTab(const FSpawnTabArgs& Args);
+	TSharedRef<SDockTab> SpawnDetailsTab(const FSpawnTabArgs& Args);
 	/** Binds the session's update delegate to the view. */
 	void WireSession();
 
@@ -264,12 +294,7 @@ private:
 	TSharedPtr<STextBlock> DiffSummaryText;
 
 	/** Rows shown in the property-difference inspector for the selected widget. */
-	TArray<TSharedPtr<FUnrealGitPropertyDiff>> InspectorItems;
-	TSharedPtr<SListView<TSharedPtr<FUnrealGitPropertyDiff>>> InspectorList;
-	/** Name of the widget currently shown in the inspector, or empty when nothing is selected. */
 	FString InspectorWidgetName;
-	/** Explanation shown when the inspector has no rows. */
-	FText InspectorEmptyMessage;
 
 	bool bShowAdded = true;
 	bool bShowRemoved = true;
@@ -310,25 +335,10 @@ private:
 	TSharedRef<ITableRow> OnGeneratePropertyRow(TSharedPtr<FDiffEntry> Item, const TSharedRef<STableViewBase>& OwnerTable);
 
 	/**
-	 * Rebuilds the inspector rows for the given node and updates the empty state.
+	 * Rebuilds the inspector for the given node.
 	 * @param Node Selected node, or null when nothing is selected.
 	 */
 	void RefreshInspector(const FUnrealGitWidgetNode* Node);
 	/** @return Inspector header text for the current selection. */
 	FText GetInspectorHeaderText() const;
-	/** @return Visible when the inspector has rows to display. */
-	EVisibility GetInspectorListVisibility() const;
-	/**
-	 * Generates one inspector row.
-	 * @param Item Difference to render.
-	 * @param OwnerTable Owning table.
-	 * @return Row widget.
-	 */
-	TSharedRef<ITableRow> OnGenerateInspectorRow(TSharedPtr<FUnrealGitPropertyDiff> Item, const TSharedRef<STableViewBase>& OwnerTable);
-	/**
-	 * Opens the copy context menu for a difference row.
-	 * @param Item Difference under the cursor.
-	 * @param ScreenPosition Menu position in screen space.
-	 */
-	void ShowInspectorContextMenu(TSharedPtr<FUnrealGitPropertyDiff> Item, const FVector2D& ScreenPosition);
 };
