@@ -18,17 +18,29 @@
 static bool IsUnrealGitProviderActiveHistory()
 {
 	ISourceControlModule& M = ISourceControlModule::Get();
-	if (!M.IsEnabled()) return false;
+	if (!M.IsEnabled())
+	{
+		return false;
+	}
 	return M.GetProvider().GetName() == FName(TEXT("UnrealGit"));
 }
 
 static void PopulateHistoryMenu(UToolMenu* InMenu)
 {
-	if (!InMenu || !IsUnrealGitProviderActiveHistory()) return;
+	if (!InMenu || !IsUnrealGitProviderActiveHistory())
+	{
+		return;
+	}
 	USourceControlHistoryWidgetContext* Context = InMenu->FindContext<USourceControlHistoryWidgetContext>();
-	if (!Context) return;
+	if (!Context)
+	{
+		return;
+	}
 	const TArray<USourceControlHistoryWidgetContext::SelectedItem> Selected = Context->GetSelectedItems();
-	if (Selected.Num() == 0) return;
+	if (Selected.Num() == 0)
+	{
+		return;
+	}
 
 	FToolMenuSection& Section = InMenu->AddSection(TEXT("UnrealGitWidgetDiff"), FText::GetEmpty());
 
@@ -55,26 +67,44 @@ static void PopulateHistoryMenu(UToolMenu* InMenu)
 				{
 					ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
 					FSourceControlStatePtr State = Provider.GetState(Selected[0].FileName, EStateCacheUsage::Use);
-					if (!State.IsValid()) return;
+					if (!State.IsValid())
+{
+	return;
+}
 					const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Cur = State->FindHistoryRevision(Selected[0].Revision);
-					if (!Cur.IsValid()) return;
+					if (!Cur.IsValid())
+{
+	return;
+}
 					int32 Idx = INDEX_NONE;
 					for (int32 i = 0; i < State->GetHistorySize(); ++i)
 					{
 						if (State->GetHistoryItem(i) == Cur) { Idx = i; break; }
 					}
-					if (Idx == INDEX_NONE || Idx + 1 >= State->GetHistorySize()) return;
+					if (Idx == INDEX_NONE || Idx + 1 >= State->GetHistorySize())
+{
+	return;
+}
 					const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Prev = State->GetHistoryItem(Idx + 1);
-					if (!Prev.IsValid()) return;
+					if (!Prev.IsValid())
+{
+	return;
+}
 					FUnrealGitWidgetDiffLauncher::Launch(Selected[0].FileName, Prev->GetRevision(), Selected[0].Revision);
 				}),
 				FCanExecuteAction::CreateLambda([Selected]()
 				{
 					ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
 					FSourceControlStatePtr State = Provider.GetState(Selected[0].FileName, EStateCacheUsage::Use);
-					if (!State.IsValid()) return false;
+					if (!State.IsValid())
+{
+	return false;
+}
 					const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> Cur = State->FindHistoryRevision(Selected[0].Revision);
-					if (!Cur.IsValid()) return false;
+					if (!Cur.IsValid())
+{
+	return false;
+}
 					int32 Idx = INDEX_NONE;
 					for (int32 i = 0; i < State->GetHistorySize(); ++i)
 					{
@@ -97,10 +127,16 @@ static void PopulateHistoryMenu(UToolMenu* InMenu)
 			{
 				ISourceControlProvider& Provider = ISourceControlModule::Get().GetProvider();
 				FSourceControlStatePtr State = Provider.GetState(Selected[0].FileName, EStateCacheUsage::Use);
-				if (!State.IsValid()) return;
+				if (!State.IsValid())
+{
+	return;
+}
 				const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> RevA = State->FindHistoryRevision(Selected[0].Revision);
 				const TSharedPtr<ISourceControlRevision, ESPMode::ThreadSafe> RevB = State->FindHistoryRevision(Selected[1].Revision);
-				if (!RevA.IsValid() || !RevB.IsValid()) return;
+				if (!RevA.IsValid() || !RevB.IsValid())
+{
+	return;
+}
 				int32 IdxA = INDEX_NONE, IdxB = INDEX_NONE;
 				for (int32 i = 0; i < State->GetHistorySize(); ++i)
 				{
@@ -119,7 +155,10 @@ static void PopulateHistoryMenu(UToolMenu* InMenu)
 void FUnrealGitWidgetDiffHistoryExtension::Register()
 {
 	UToolMenus* ToolMenus = UToolMenus::Get();
-	if (!ToolMenus) return;
+	if (!ToolMenus)
+{
+	return;
+}
 	UToolMenu* Menu = ToolMenus->FindMenu(TEXT("RevisionControl.History.ContextMenu"));
 	if (!Menu)
 	{
@@ -134,7 +173,10 @@ void FUnrealGitWidgetDiffHistoryExtension::Register()
 void FUnrealGitWidgetDiffHistoryExtension::Unregister()
 {
 	UToolMenus* ToolMenus = UToolMenus::Get();
-	if (!ToolMenus) return;
+	if (!ToolMenus)
+{
+	return;
+}
 	if (UToolMenu* Menu = ToolMenus->FindMenu(TEXT("RevisionControl.History.ContextMenu")))
 	{
 		Menu->RemoveSection(TEXT("UnrealGitWidgetDiffHistoryDynamic"));
