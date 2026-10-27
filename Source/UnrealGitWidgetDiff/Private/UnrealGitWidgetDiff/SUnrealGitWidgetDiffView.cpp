@@ -916,8 +916,8 @@ void SUnrealGitWidgetDiffView::RefreshDetailsViews(const FUnrealGitWidgetNode* N
 		RightDetailsView->SetObject(RightWidget);
 	}
 
-	LastLeftScrollOffset = -1.0f;
-	LastRightScrollOffset = -1.0f;
+	LastLeftScrollProgress = -1.0f;
+	LastRightScrollProgress = -1.0f;
 }
 
 FText SUnrealGitWidgetDiffView::GetInspectorHeaderText() const
@@ -966,30 +966,42 @@ void SUnrealGitWidgetDiffView::Tick(const FGeometry& AllottedGeometry, const dou
 
 	if (LeftDetailsScrollBar.IsValid() && RightDetailsScrollBar.IsValid() && !bSyncingDetailsScroll)
 	{
-		const float LeftOffset = LeftDetailsScrollBar->DistanceFromTop();
-		const float RightOffset = RightDetailsScrollBar->DistanceFromTop();
-		const bool bLeftMoved = !FMath::IsNearlyEqual(LeftOffset, LastLeftScrollOffset, 0.001f);
-		const bool bRightMoved = !FMath::IsNearlyEqual(RightOffset, LastRightScrollOffset, 0.001f);
+		auto ComputeProgress = [](const TSharedPtr<SScrollBar>& Bar) -> float
+		{
+			const float ScrollableRange = 1.0f - Bar->ThumbSizeFraction();
+			if (ScrollableRange <= KINDA_SMALL_NUMBER)
+			{
+				return 0.0f;
+			}
+			return FMath::Clamp(Bar->DistanceFromTop() / ScrollableRange, 0.0f, 1.0f);
+		};
 
-		if (bLeftMoved && !FMath::IsNearlyEqual(LeftOffset, RightOffset, 0.001f))
+		const float LeftProgress = ComputeProgress(LeftDetailsScrollBar);
+		const float RightProgress = ComputeProgress(RightDetailsScrollBar);
+		const bool bLeftMoved = !FMath::IsNearlyEqual(LeftProgress, LastLeftScrollProgress, 0.001f);
+		const bool bRightMoved = !FMath::IsNearlyEqual(RightProgress, LastRightScrollProgress, 0.001f);
+
+		if (bLeftMoved && !FMath::IsNearlyEqual(LeftProgress, RightProgress, 0.001f))
 		{
 			bSyncingDetailsScroll = true;
-			RightDetailsScrollBar->SetState(LeftOffset, RightDetailsScrollBar->ThumbSizeFraction(), true);
-			LastLeftScrollOffset = LeftOffset;
-			LastRightScrollOffset = LeftOffset;
+			const float TargetThumb = RightDetailsScrollBar->ThumbSizeFraction();
+			RightDetailsScrollBar->SetState(LeftProgress * FMath::Max(0.0f, 1.0f - TargetThumb), TargetThumb, true);
+			LastLeftScrollProgress = LeftProgress;
+			LastRightScrollProgress = LeftProgress;
 			bSyncingDetailsScroll = false;
 		}
-		else if (bRightMoved && !FMath::IsNearlyEqual(LeftOffset, RightOffset, 0.001f))
+		else if (bRightMoved && !FMath::IsNearlyEqual(LeftProgress, RightProgress, 0.001f))
 		{
 			bSyncingDetailsScroll = true;
-			LeftDetailsScrollBar->SetState(RightOffset, LeftDetailsScrollBar->ThumbSizeFraction(), true);
-			LastLeftScrollOffset = RightOffset;
-			LastRightScrollOffset = RightOffset;
+			const float TargetThumb = LeftDetailsScrollBar->ThumbSizeFraction();
+			LeftDetailsScrollBar->SetState(RightProgress * FMath::Max(0.0f, 1.0f - TargetThumb), TargetThumb, true);
+			LastLeftScrollProgress = RightProgress;
+			LastRightScrollProgress = RightProgress;
 			bSyncingDetailsScroll = false;
 		}
 
-		LastLeftScrollOffset = LeftDetailsScrollBar->DistanceFromTop();
-		LastRightScrollOffset = RightDetailsScrollBar->DistanceFromTop();
+		LastLeftScrollProgress = ComputeProgress(LeftDetailsScrollBar);
+		LastRightScrollProgress = ComputeProgress(RightDetailsScrollBar);
 	}
 }
 

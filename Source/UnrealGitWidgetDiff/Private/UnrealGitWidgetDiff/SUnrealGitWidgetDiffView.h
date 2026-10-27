@@ -139,9 +139,9 @@ private:
 	/** External scrollbars used to keep both details panels in sync. */
 	TSharedPtr<class SScrollBar> LeftDetailsScrollBar;
 	TSharedPtr<class SScrollBar> RightDetailsScrollBar;
-	/** Last observed scroll offsets, used to detect which panel moved. */
-	float LastLeftScrollOffset = -1.0f;
-	float LastRightScrollOffset = -1.0f;
+	/** Last observed scroll progress (0-1 of the scrollable range) for movement detection. */
+	float LastLeftScrollProgress = -1.0f;
+	float LastRightScrollProgress = -1.0f;
 	/** Guards the mirroring write-back from re-entering. */
 	bool bSyncingDetailsScroll = false;
 	/** Top-level property names that should be boxed in the details views. */
