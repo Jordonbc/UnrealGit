@@ -29,7 +29,7 @@ bool FUnrealGitRevisionMaterializerTest::RunTest(const FString&)
 	TArray<uint8> Read;
 	TestTrue(TEXT("Read file"), FFileHelper::LoadFileToArray(Read, *OutFile));
 	TestEqual(TEXT("Bytes match"), Read.Num(), 4);
-	TestEqual(TEXT("Byte0"), Read[0], (uint8)0xDE);
+	TestEqual(TEXT("Byte0"), Read[0], static_cast<uint8>(0xDE));
 
 	Materializer->Cleanup();
 	TestFalse(TEXT("Temp file cleaned"), IFileManager::Get().FileExists(*OutFile));
