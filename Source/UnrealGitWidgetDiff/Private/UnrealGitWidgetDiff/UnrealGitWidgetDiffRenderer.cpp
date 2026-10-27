@@ -11,6 +11,7 @@
 #include "ImageUtils.h"
 #include "Slate/WidgetRenderer.h"
 #include "UnrealGitWidgetDiff/UnrealGitWidgetDiffTypes.h"
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffPreviewFactory.h"
 #include "WidgetBlueprint.h"
 #include "WidgetBlueprintEditorUtils.h"
 #include "Widgets/SVirtualWindow.h"
@@ -74,17 +75,18 @@ bool FUnrealGitWidgetDiffRenderer::Render(UWidgetBlueprint* Blueprint, EThumbnai
 		return false;
 	}
 
-	UUserWidget* WidgetInstance = NewObject<UUserWidget>(World, Blueprint->GeneratedClass, NAME_None, RF_Transient);
-	if (!WidgetInstance)
+	TStrongObjectPtr<UUserWidget> WidgetStrong;
+	TSharedPtr<SWidget> UnusedSlate;
+	FVector2D UnusedDesignSize;
+	if (!CreatePreviewWidget(Blueprint, Mode, WidgetStrong, UnusedSlate, UnusedDesignSize, false))
 	{
 		OutError = LOCTEXT("CreateFailed", "Failed to create widget instance.");
 		return false;
 	}
-
-	WidgetInstance->SetDesignerFlags(EWidgetDesignFlags::Designing | EWidgetDesignFlags::ExecutePreConstruct);
-	if (!WidgetInstance->Initialize())
+	UUserWidget* WidgetInstance = WidgetStrong.Get();
+	if (!WidgetInstance)
 	{
-		OutError = LOCTEXT("InitFailed", "Failed to initialize widget instance.");
+		OutError = LOCTEXT("CreateFailed", "Failed to create widget instance.");
 		return false;
 	}
 
