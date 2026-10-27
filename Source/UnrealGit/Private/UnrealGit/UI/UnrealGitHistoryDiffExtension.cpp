@@ -103,14 +103,34 @@ namespace UnrealGitHistoryDiff
 
 void FUnrealGitHistoryDiffExtension::Register()
 {
-	UToolMenu* Menu = UToolMenus::Get()->RegisterMenu(TEXT("RevisionControl.History.ContextMenu"));
-	Menu->bShouldCloseWindowAfterMenuSelection = true;
-	Menu->AddDynamicSection(NAME_None, FNewToolMenuDelegate::CreateStatic(&FUnrealGitHistoryDiffExtension::PopulateDiffMenu));
+	UToolMenus* ToolMenus = UToolMenus::TryGet();
+	if (!ToolMenus)
+	{
+		return;
+	}
+
+	// ExtendMenu keeps the engine's own registration intact; RegisterMenu would
+	// mark the shared menu as plugin-owned and stop the engine adding its section.
+	if (UToolMenu* Menu = ToolMenus->ExtendMenu(TEXT("RevisionControl.History.ContextMenu")))
+	{
+		Menu->AddDynamicSection(TEXT("UnrealGitHistoryDiffDynamic"), FNewToolMenuDelegate::CreateStatic(&FUnrealGitHistoryDiffExtension::PopulateDiffMenu));
+	}
 }
 
 void FUnrealGitHistoryDiffExtension::Unregister()
 {
-	UToolMenus::Get()->RemoveMenu(TEXT("RevisionControl.History.ContextMenu"));
+	// The ToolMenus singleton is destroyed before modules unload at editor exit,
+	// so it can legitimately be unavailable here. Remove only our own section.
+	UToolMenus* ToolMenus = UToolMenus::TryGet();
+	if (!ToolMenus)
+	{
+		return;
+	}
+
+	if (UToolMenu* Menu = ToolMenus->FindMenu(TEXT("RevisionControl.History.ContextMenu")))
+	{
+		Menu->RemoveSection(TEXT("UnrealGitHistoryDiffDynamic"));
+	}
 }
 
 void FUnrealGitHistoryDiffExtension::PopulateDiffMenu(UToolMenu* InMenu)

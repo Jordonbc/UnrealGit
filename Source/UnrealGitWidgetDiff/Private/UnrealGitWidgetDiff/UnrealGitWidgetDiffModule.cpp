@@ -44,6 +44,9 @@ void IUnrealGitWidgetDiffModule::StartupModule()
 
 void IUnrealGitWidgetDiffModule::ShutdownModule()
 {
+	FUnrealGitWidgetDiffHistoryExtension::Unregister();
+	FUnrealGitWidgetDiffAssetContextMenuExtension::Unregister();
+	FUnrealGitWidgetDiffToolbarExtension::Unregister();
 	FGlobalTabmanager::Get()->UnregisterNomadTabSpawner(TEXT("UnrealGitWidgetDiff"));
 }
 
