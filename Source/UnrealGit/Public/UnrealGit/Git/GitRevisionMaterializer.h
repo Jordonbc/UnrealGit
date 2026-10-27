@@ -11,7 +11,7 @@ class IGitProcessRunner;
  * Materializes Git revisions to temporary files for Unreal's diff and asset load pipeline.
  *
  * Responsibility:
- * - Executes `git show <rev>:<path>` and writes the result as a binary-safe temp file.
+ * - Executes `git cat-file --filters <rev>:<path>` (LFS-smudging) with `git show` as a fallback and writes the result as a binary-safe temp file.
  * - Tracks the created files and provides explicit cleanup.
  *
  * Threading:
@@ -38,6 +38,7 @@ public:
 	 * @param RelativePath Repository-relative path using forward slashes.
 	 * @param OutAbsoluteFilename Absolute temp filename on disk.
 	 * @param OutError Error message on failure.
+	 * @return True on success, false otherwise.
 	 */
 	bool Materialize(
 		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
