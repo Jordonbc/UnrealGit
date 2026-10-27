@@ -1177,23 +1177,25 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 			const FString Abs = FPaths::ConvertRelativePathToFull(File);
 			const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
 			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetCheckedOut(true);
+			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetLockState(EGitLockState::LockedByMe, FString());
 			bAnyStateChanged = true;
 		}
 	}
-	else if (Output.bSuccess && (OperationName == TEXT("CheckIn") || OperationName == TEXT("Revert") || OperationName == TEXT("Delete")))
+	else if (Output.bSuccess && (OperationName == TEXT("CheckIn") || OperationName == TEXT("Revert") || OperationName == TEXT("Delete") || OperationName == TEXT("ForceUnlock")))
 	{
 		for (const FString& File : Files)
 		{
 			const FString Abs = FPaths::ConvertRelativePathToFull(File);
 			const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
 			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetCheckedOut(false);
+			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetLockState(EGitLockState::NotLocked, FString());
 			bAnyStateChanged = true;
 		}
 	}
 
-	if (Output.bSuccess && (OperationName == TEXT("CheckOut") || OperationName == TEXT("CheckIn") || OperationName == TEXT("Revert")))
+	if (Output.bSuccess && (OperationName == TEXT("CheckOut") || OperationName == TEXT("CheckIn") || OperationName == TEXT("Revert") || OperationName == TEXT("ForceUnlock")))
 	{
-		// Checkout/checkin change LFS lock ownership, so refresh locks with the next status query.
+		// Checkout/checkin/unlock change LFS lock ownership, so refresh locks with the next status query.
 		NextLfsLocksRefreshUtc = FDateTime(0);
 	}
 
