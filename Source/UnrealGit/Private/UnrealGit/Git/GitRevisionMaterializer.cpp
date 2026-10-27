@@ -6,6 +6,7 @@
 #include "Misc/FileHelper.h"
 #include "UnrealGit/Git/GitProcessTypes.h"
 #include "UnrealGit/Git/IGitProcessRunner.h"
+#include "UnrealGit/Private/UnrealGit/Git/Parsers/GitParsingUtils.h"
 
 FGitRevisionMaterializer::FGitRevisionMaterializer(FString InSessionRootDirectory)
 	: SessionRootDirectory(MoveTemp(InSessionRootDirectory))
@@ -69,8 +70,7 @@ bool FGitRevisionMaterializer::Materialize(
 	{
 		if (ShowResult.StdErr.Num() > 0)
 		{
-			FUTF8ToTCHAR Err(reinterpret_cast<const ANSICHAR*>(ShowResult.StdErr.GetData()), ShowResult.StdErr.Num());
-			OutError = FString(Err.Length(), Err.Get());
+			OutError = UnrealGit::Parsing::Utf8BytesToString(ShowResult.StdErr);
 		}
 		else
 		{
