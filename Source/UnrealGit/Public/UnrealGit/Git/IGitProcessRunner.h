@@ -6,6 +6,7 @@
 #include "UnrealGit/Git/GitProcessTypes.h"
 
 /**
+ * @class IGitProcessRunner
  * Executes Git commands using the system Git binary.
  *
  * This interface forms the boundary between Unreal code and external process execution.
