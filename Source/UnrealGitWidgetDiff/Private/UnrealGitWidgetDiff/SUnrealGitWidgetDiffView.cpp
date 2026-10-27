@@ -909,8 +909,10 @@ void SUnrealGitWidgetDiffView::OnPropertySelectionChanged(TSharedPtr<FDiffEntry>
 	const TSharedPtr<FUnrealGitWidgetNode> Node = FindHierarchyNode(Item->Name);
 	if (Node.IsValid())
 	{
+		ExpandAncestors(*Node);
 		HierarchyList->SetSelection(Node);
 		HierarchyList->RequestScrollIntoView(Node);
+		FocusWidgetNode(*Node);
 	}
 }
 
