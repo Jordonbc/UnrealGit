@@ -143,11 +143,9 @@ FUnrealGitSourceControlProvider::~FUnrealGitSourceControlProvider()
 	Close();
 }
 
-void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
+void FUnrealGitSourceControlProvider::ResolveRuntimeSettings()
 {
 	LastErrorText = FText::GetEmpty();
-
-	UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Init (bForceConnection=%s)"), bForceConnection ? TEXT("true") : TEXT("false"));
 
 	FText SettingsError;
 	if (!FUnrealGitSettingsResolver::Build(Settings, SettingsError))
@@ -159,17 +157,37 @@ void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
 		Settings.RepositoryDiscoveryDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
 	}
 
-	UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: GitExecutable=\"%s\" RepoDiscoveryDir=\"%s\" EnableLfsLocks=%s"),
-		*Settings.GitExecutable,
-		*Settings.RepositoryDiscoveryDirectory,
-		Settings.bEnableLfsLocks ? TEXT("true") : TEXT("false"));
-
 	ProcessRunner = MakeShared<FSystemGitProcessRunner, ESPMode::ThreadSafe>(Settings.GitExecutable);
 
 	// Filesystem-only repository detection so IsEnabled() is meaningful before any worker runs.
 	RepoRoot = FindRepositoryRootPath(GetWorkingDirectoryHint());
 	bRepositoryFound = !RepoRoot.IsEmpty();
+	NextLfsLocksRefreshUtc = FDateTime(0);
 	NextPeriodicRefreshUtc = FDateTime(0);
+}
+
+void FUnrealGitSourceControlProvider::ApplyEnvironmentInfo(const FGitEnvironmentInfo& Info)
+{
+	{
+		FScopeLock Scope(&EnvironmentLock);
+		EnvironmentInfo = Info;
+	}
+
+	bGitAvailable = Info.bGitAvailable;
+	Settings.UserName = Info.UserName;
+	Settings.UserEmail = Info.UserEmail;
+}
+
+void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
+{
+	UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Init (bForceConnection=%s)"), bForceConnection ? TEXT("true") : TEXT("false"));
+
+	ResolveRuntimeSettings();
+
+	UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: GitExecutable=\"%s\" RepoDiscoveryDir=\"%s\" EnableLfsLocks=%s"),
+		*Settings.GitExecutable,
+		*Settings.RepositoryDiscoveryDirectory,
+		Settings.bEnableLfsLocks ? TEXT("true") : TEXT("false"));
 
 	const FString SessionDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::DiffDir(), TEXT("UnrealGit"), FGuid::NewGuid().ToString(EGuidFormats::Digits)));
 	RevisionMaterializer = MakeShared<FGitRevisionMaterializer, ESPMode::ThreadSafe>(SessionDir);
@@ -183,13 +201,7 @@ void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
 		if (bEnvironmentReady)
 		{
 			FGitEnvironmentInfo Info = EnvironmentFuture.Get();
-			{
-				FScopeLock Scope(&EnvironmentLock);
-				EnvironmentInfo = Info;
-			}
-			bGitAvailable = Info.bGitAvailable;
-			Settings.UserName = Info.UserName;
-			Settings.UserEmail = Info.UserEmail;
+			ApplyEnvironmentInfo(Info);
 			UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Environment: GitAvailable=%s GitVersion=\"%s\" LfsAvailable=%s LfsVersion=\"%s\" User=\"%s\" Email=\"%s\""),
 				Info.bGitAvailable ? TEXT("true") : TEXT("false"),
 				*Info.GitVersion,
@@ -868,24 +880,7 @@ bool FUnrealGitSourceControlProvider::SetGitExecutableOverride(const FString& In
 
 void FUnrealGitSourceControlProvider::RefreshRepositoryState()
 {
-	LastErrorText = FText::GetEmpty();
-
-	FText SettingsError;
-	if (!FUnrealGitSettingsResolver::Build(Settings, SettingsError))
-	{
-		LastErrorText = SettingsError;
-		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Settings resolver failed: %s"), *SettingsError.ToString());
-		Settings = FUnrealGitProviderSettings();
-		Settings.GitExecutable = TEXT("git");
-		Settings.RepositoryDiscoveryDirectory = FPaths::ConvertRelativePathToFull(FPaths::ProjectDir());
-	}
-
-	ProcessRunner = MakeShared<FSystemGitProcessRunner, ESPMode::ThreadSafe>(Settings.GitExecutable);
-
-	RepoRoot = FindRepositoryRootPath(GetWorkingDirectoryHint());
-	bRepositoryFound = !RepoRoot.IsEmpty();
-	NextLfsLocksRefreshUtc = FDateTime(0);
-	NextPeriodicRefreshUtc = FDateTime(0);
+	ResolveRuntimeSettings();
 
 	StartEnvironmentValidation();
 	if (EnvironmentFuture.IsValid())
@@ -894,13 +889,7 @@ void FUnrealGitSourceControlProvider::RefreshRepositoryState()
 		if (EnvironmentFuture.WaitFor(FTimespan::FromSeconds(SyncTimeoutSeconds)))
 		{
 			const FGitEnvironmentInfo Info = EnvironmentFuture.Get();
-			{
-				FScopeLock Scope(&EnvironmentLock);
-				EnvironmentInfo = Info;
-			}
-			bGitAvailable = Info.bGitAvailable;
-			Settings.UserName = Info.UserName;
-			Settings.UserEmail = Info.UserEmail;
+			ApplyEnvironmentInfo(Info);
 		}
 		else
 		{
@@ -1345,11 +1334,7 @@ void FUnrealGitSourceControlProvider::Tick()
 	if (EnvironmentFuture.IsValid() && EnvironmentFuture.IsReady())
 	{
 		const FGitEnvironmentInfo Info = EnvironmentFuture.Get();
-		{
-			FScopeLock Scope(&EnvironmentLock);
-			EnvironmentInfo = Info;
-		}
-		bGitAvailable = Info.bGitAvailable;
+		ApplyEnvironmentInfo(Info);
 		UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Environment: GitAvailable=%s GitVersion=\"%s\" LfsAvailable=%s LfsVersion=\"%s\" User=\"%s\" Email=\"%s\""),
 			Info.bGitAvailable ? TEXT("true") : TEXT("false"),
 			*Info.GitVersion,

@@ -51,8 +51,5 @@ void FGitResolveWorker::Execute(
 		return;
 	}
 
-	OutOutput.bSuccess = true;
-	OutOutput.RepoRoot = RepoRoot;
-	OutOutput.bShouldUpdateStatus = true;
-	OutOutput.FilesToUpdateStatus = Files;
+	UnrealGit::Workers::CompleteWorkerSuccess(OutOutput, RepoRoot, Files);
 }

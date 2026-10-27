@@ -29,8 +29,7 @@ void FGitCopyWorker::Execute(
 
 	if (Files.Num() == 0)
 	{
-		OutOutput.bSuccess = true;
-		OutOutput.RepoRoot = RepoRoot;
+		UnrealGit::Workers::CompleteWorkerSuccess(OutOutput, RepoRoot, Files, false);
 		return;
 	}
 
@@ -51,8 +50,5 @@ void FGitCopyWorker::Execute(
 		return;
 	}
 
-	OutOutput.bSuccess = true;
-	OutOutput.RepoRoot = RepoRoot;
-	OutOutput.bShouldUpdateStatus = true;
-	OutOutput.FilesToUpdateStatus = Files;
+	UnrealGit::Workers::CompleteWorkerSuccess(OutOutput, RepoRoot, Files);
 }

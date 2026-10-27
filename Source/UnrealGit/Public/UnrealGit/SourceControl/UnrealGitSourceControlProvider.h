@@ -115,6 +115,8 @@ private:
 	struct FCommand;
 
 	void RefreshRepositoryState();
+	void ResolveRuntimeSettings();
+	void ApplyEnvironmentInfo(const FGitEnvironmentInfo& Info);
 	void UpdateStatesFromStatusSnapshot(const struct FGitStatusSnapshot& Snapshot, const TArray<FString>& RequestedFiles);
 	void ApplyLfsLocksToStates(const TOptional<struct FGitStatusSnapshot>& Snapshot, const TArray<struct FGitLfsLock>& Locks);
 	void ReconcileWorkerOutput(const FSourceControlOperationRef& Operation, const TArray<FString>& Files, const FSourceControlOperationComplete& Delegate, const struct FUnrealGitWorkerOutput& Output);

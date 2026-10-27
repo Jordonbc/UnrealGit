@@ -94,10 +94,7 @@ void FGitCheckInWorker::Execute(
 			UnrealGit::Workers::UnlockLfsLocks(ProcessRunner, RepoRoot, RelativePaths, false, UnlockError);
 		}
 
-		OutOutput.bSuccess = true;
-		OutOutput.RepoRoot = RepoRoot;
-		OutOutput.bShouldUpdateStatus = true;
-		OutOutput.FilesToUpdateStatus = Files;
+		UnrealGit::Workers::CompleteWorkerSuccess(OutOutput, RepoRoot, Files);
 		return;
 	}
 
@@ -143,7 +140,7 @@ void FGitCheckInWorker::Execute(
 		if (CommitResult.ExitCode != 0)
 		{
 			OutOutput.bSuccess = false;
-			OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(CommitResult.StdErr));
+			OutOutput.ErrorText = UnrealGit::Workers::MakeGitErrorText(CommitResult);
 			return;
 		}
 	}
@@ -205,9 +202,7 @@ void FGitCheckInWorker::Execute(
 		UnrealGit::Workers::UnlockLfsLocks(ProcessRunner, RepoRoot, RelativePaths, false, UnlockError);
 	}
 
-	OutOutput.bSuccess = true;
-	OutOutput.RepoRoot = RepoRoot;
-	OutOutput.bShouldUpdateStatus = true;
+	UnrealGit::Workers::CompleteWorkerSuccess(OutOutput, RepoRoot, Files);
 
 	if (Settings.bAutoPushAfterSubmit)
 	{
@@ -219,7 +214,7 @@ void FGitCheckInWorker::Execute(
 		if (PushResult.ExitCode != 0)
 		{
 			OutOutput.bSuccess = false;
-			OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(PushResult.StdErr));
+			OutOutput.ErrorText = UnrealGit::Workers::MakeGitErrorText(PushResult);
 			return;
 		}
 	}

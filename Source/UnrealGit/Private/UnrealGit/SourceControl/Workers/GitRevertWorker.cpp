@@ -45,7 +45,7 @@ void FGitRevertWorker::Execute(
 		if (RestoreResult.ExitCode != 0)
 		{
 			OutOutput.bSuccess = false;
-			OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(RestoreResult.StdErr));
+			OutOutput.ErrorText = UnrealGit::Workers::MakeGitErrorText(RestoreResult);
 			return;
 		}
 	}
@@ -109,8 +109,5 @@ void FGitRevertWorker::Execute(
 		}
 	}
 
-	OutOutput.bSuccess = true;
-	OutOutput.RepoRoot = RepoRoot;
-	OutOutput.bShouldUpdateStatus = true;
-	OutOutput.FilesToUpdateStatus = Files;
+	UnrealGit::Workers::CompleteWorkerSuccess(OutOutput, RepoRoot, Files);
 }

@@ -38,11 +38,9 @@ void FGitSyncWorker::Execute(
 	if (PullResult.ExitCode != 0)
 	{
 		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(PullResult.StdErr));
+		OutOutput.ErrorText = UnrealGit::Workers::MakeGitErrorText(PullResult);
 		return;
 	}
 
-	OutOutput.bSuccess = true;
-	OutOutput.RepoRoot = RepoRoot;
-	OutOutput.bShouldUpdateStatus = true;
+	UnrealGit::Workers::CompleteWorkerSuccess(OutOutput, RepoRoot, TArray<FString>());
 }

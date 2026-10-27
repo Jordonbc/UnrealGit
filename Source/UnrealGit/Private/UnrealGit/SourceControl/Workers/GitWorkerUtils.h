@@ -317,6 +317,25 @@ namespace UnrealGit::Workers
 		return bSucceeded;
 	}
 
+	/** Builds a worker error message from git's stderr. */
+	inline FText MakeGitErrorText(const FGitProcessResult& Result)
+	{
+		return FText::FromString(BytesToTextUtf8Lossy(Result.StdErr).TrimStartAndEnd());
+	}
+
+	/** Fills the standard successful worker output (repo root + status refresh). */
+	inline void CompleteWorkerSuccess(
+		FUnrealGitWorkerOutput& OutOutput,
+		const FString& RepoRoot,
+		const TArray<FString>& Files,
+		bool bShouldUpdateStatus = true)
+	{
+		OutOutput.bSuccess = true;
+		OutOutput.RepoRoot = RepoRoot;
+		OutOutput.bShouldUpdateStatus = bShouldUpdateStatus;
+		OutOutput.FilesToUpdateStatus = Files;
+	}
+
 	/**
 	 * Releases LFS locks for the given repo-relative paths by resolving lock IDs first.
 	 *
