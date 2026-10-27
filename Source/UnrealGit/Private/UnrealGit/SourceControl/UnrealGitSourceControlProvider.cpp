@@ -240,6 +240,11 @@ int32 FUnrealGitSourceControlProvider::GetStateBranchIndex(const FString& /*Bran
 	return INDEX_NONE;
 }
 
+bool FUnrealGitSourceControlProvider::GetStateBranchAtIndex(const int32 /*BranchIndex*/, FString& /*OutBranchName*/) const
+{
+	return false;
+}
+
 FSourceControlStateRef FUnrealGitSourceControlProvider::GetOrCreateStateInternal(const FString& AbsoluteFilename)
 {
 	FScopeLock Lock(&StateCacheLock);
@@ -568,6 +573,11 @@ bool FUnrealGitSourceControlProvider::UsesCheckout() const
 	return true;
 }
 
+bool FUnrealGitSourceControlProvider::UsesSoftRevertOnDelete() const
+{
+	return false;
+}
+
 bool FUnrealGitSourceControlProvider::UsesFileRevisions() const
 {
 	return true;
@@ -583,14 +593,14 @@ bool FUnrealGitSourceControlProvider::AllowsDiffAgainstDepot() const
 	return true;
 }
 
-TOptional<bool> FUnrealGitSourceControlProvider::IsAtLatestRevision() const
+TOptional<bool> FUnrealGitSourceControlProvider::HasChangesToSync() const
 {
 	return TOptional<bool>();
 }
 
-TOptional<int> FUnrealGitSourceControlProvider::GetNumLocalChanges() const
+TOptional<bool> FUnrealGitSourceControlProvider::HasChangesToCheckIn() const
 {
-	return TOptional<int>();
+	return TOptional<bool>();
 }
 
 void FUnrealGitSourceControlProvider::UpdateStatesFromStatusSnapshot(const FGitStatusSnapshot& Snapshot, const TArray<FString>& RequestedFiles)

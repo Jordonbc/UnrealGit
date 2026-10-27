@@ -40,6 +40,7 @@ public:
 	virtual bool QueryStateBranchConfig(const FString& ConfigSrc, const FString& ConfigDest) override;
 	virtual void RegisterStateBranches(const TArray<FString>& BranchNames, const FString& ContentRoot) override;
 	virtual int32 GetStateBranchIndex(const FString& BranchName) const override;
+	virtual bool GetStateBranchAtIndex(int32 BranchIndex, FString& OutBranchName) const override;
 
 	virtual ECommandResult::Type GetState(const TArray<FString>& InFiles, TArray<FSourceControlStateRef>& OutState, EStateCacheUsage::Type InStateCacheUsage) override;
 	virtual ECommandResult::Type GetState(const TArray<FSourceControlChangelistRef>& InChangelists, TArray<FSourceControlChangelistStateRef>& OutState, EStateCacheUsage::Type InStateCacheUsage) override;
@@ -60,11 +61,12 @@ public:
 	virtual bool UsesChangelists() const override;
 	virtual bool UsesUncontrolledChangelists() const override;
 	virtual bool UsesCheckout() const override;
+	virtual bool UsesSoftRevertOnDelete() const override;
 	virtual bool UsesFileRevisions() const override;
 	virtual bool UsesSnapshots() const override;
 	virtual bool AllowsDiffAgainstDepot() const override;
-	virtual TOptional<bool> IsAtLatestRevision() const override;
-	virtual TOptional<int> GetNumLocalChanges() const override;
+	virtual TOptional<bool> HasChangesToSync() const override;
+	virtual TOptional<bool> HasChangesToCheckIn() const override;
 	virtual void Tick() override;
 
 #if SOURCE_CONTROL_WITH_SLATE
