@@ -21,6 +21,8 @@ struct FUnrealGitWidgetDiffCanvasState
 class SUnrealGitWidgetDiffCanvas : public SCompoundWidget
 {
 public:
+	DECLARE_DELEGATE_OneParam(FOnWidgetPicked, const FString&);
+
 	SLATE_BEGIN_ARGS(SUnrealGitWidgetDiffCanvas) {}
 		SLATE_ATTRIBUTE(const FSlateBrush*, BaseBrush)
 		SLATE_ATTRIBUTE(const FSlateBrush*, OverlayBrush)
@@ -32,6 +34,7 @@ public:
 		SLATE_ATTRIBUTE(FString, SelectedNode)
 		SLATE_ARGUMENT(TSharedPtr<SWidget>, PreviewContent)
 		SLATE_ARGUMENT(FVector2D, DesignSize)
+		SLATE_EVENT(FOnWidgetPicked, OnWidgetPicked)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
@@ -76,6 +79,11 @@ private:
 	FVector2D ComputeViewOffset() const;
 	void RebuildZoomPan();
 
+	FOnWidgetPicked OnWidgetPicked;
+
 	bool bPanning = false;
+	bool bMouseDown = false;
+	bool bDragged = false;
 	FVector2D LastMousePosition = FVector2D::ZeroVector;
+	FVector2D MouseDownPosition = FVector2D::ZeroVector;
 };

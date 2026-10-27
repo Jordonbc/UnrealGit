@@ -56,6 +56,7 @@ private:
 	bool bLivePreviewsBuilt = false;
 
 	void EnsureLivePreviews();
+	void SelectWidgetByName(const FString& Name);
 
 	bool bFitToWindow = true;
 	bool bSwapped = false;

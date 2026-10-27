@@ -255,7 +255,8 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 								.FitToWindow_Lambda([this]() { return bFitToWindow; })
 								.TransformState(CanvasState)
 								.HighlightNodes(&CanvasNodes)
-								.SelectedNode_Lambda([this]() { return SelectedNodeName; }) ]
+								.SelectedNode_Lambda([this]() { return SelectedNodeName; })
+								.OnWidgetPicked_Lambda([this](const FString& Name) { SelectWidgetByName(Name); }) ]
 						]
 						+ SHorizontalBox::Slot().AutoWidth()
 						[ SNew(SSeparator).Orientation(Orient_Vertical) ]
@@ -277,7 +278,8 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 								.FitToWindow_Lambda([this]() { return bFitToWindow; })
 								.TransformState(CanvasState)
 								.HighlightNodes(&CanvasNodes)
-								.SelectedNode_Lambda([this]() { return SelectedNodeName; }) ]
+								.SelectedNode_Lambda([this]() { return SelectedNodeName; })
+								.OnWidgetPicked_Lambda([this](const FString& Name) { SelectWidgetByName(Name); }) ]
 						]
 					]
 
@@ -384,6 +386,7 @@ void SUnrealGitWidgetDiffView::EnsureLivePreviews()
 			return;
 		}
 		Widget->SetDesignerFlags(EWidgetDesignFlags::Designing | EWidgetDesignFlags::ExecutePreConstruct);
+		Widget->SetVisibility(ESlateVisibility::HitTestInvisible);
 		if (!Widget->Initialize())
 		{
 			return;
@@ -421,6 +424,23 @@ void SUnrealGitWidgetDiffView::EnsureLivePreviews()
 	if (RightCanvas.IsValid())
 	{
 		RightCanvas->SetPreviewContent(RightPreviewWidget, RightDesignSize);
+	}
+}
+
+void SUnrealGitWidgetDiffView::SelectWidgetByName(const FString& Name)
+{
+	if (!HierarchyList.IsValid())
+	{
+		return;
+	}
+	for (const TSharedPtr<FUnrealGitWidgetNode>& Node : HierarchyItems)
+	{
+		if (Node.IsValid() && Node->Name == Name)
+		{
+			HierarchyList->SetSelection(Node);
+			HierarchyList->RequestScrollIntoView(Node);
+			break;
+		}
 	}
 }
 

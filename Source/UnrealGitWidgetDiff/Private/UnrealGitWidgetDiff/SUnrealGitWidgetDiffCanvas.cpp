@@ -65,6 +65,13 @@ void SUnrealGitWidgetDiffCanvas::Construct(const FArguments& InArgs)
 	SelectedNode = InArgs._SelectedNode;
 	PreviewContent = InArgs._PreviewContent;
 	DesignSize = InArgs._DesignSize;
+	OnWidgetPicked = InArgs._OnWidgetPicked;
+
+	if (PreviewContent.IsValid())
+	{
+		// Read-only Designer mode: the live hierarchy renders but never receives input.
+		PreviewContent->SetVisibility(EVisibility::HitTestInvisible);
+	}
 
 	SetClipping(EWidgetClipping::ClipToBounds);
 
@@ -435,7 +442,11 @@ FReply SUnrealGitWidgetDiffCanvas::OnMouseButtonDown(const FGeometry& MyGeometry
 	if (MouseEvent.GetEffectingButton() == EKeys::LeftMouseButton)
 	{
 		bPanning = true;
+		bMouseDown = true;
+		bDragged = false;
 		LastMousePosition = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
+		MouseDownPosition = LastMousePosition;
+		// Capture immediately so the live hierarchy never receives the drag.
 		return FReply::Handled().CaptureMouse(SharedThis(this));
 	}
 	return FReply::Unhandled();
@@ -447,6 +458,10 @@ FReply SUnrealGitWidgetDiffCanvas::OnMouseMove(const FGeometry& MyGeometry, cons
 	{
 		FUnrealGitWidgetDiffCanvasState& State = GetState();
 		const FVector2D Current = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
+		if (FVector2D::Distance(Current, MouseDownPosition) > 4.0f)
+		{
+			bDragged = true;
+		}
 		State.Pan += Current - LastMousePosition;
 		LastMousePosition = Current;
 		Invalidate(EInvalidateWidget::Paint);
@@ -459,7 +474,43 @@ FReply SUnrealGitWidgetDiffCanvas::OnMouseButtonUp(const FGeometry& MyGeometry, 
 {
 	if (MouseEvent.GetEffectingButton() == EKeys::LeftMouseButton && bPanning)
 	{
+		const bool bWasClick = bMouseDown && !bDragged;
 		bPanning = false;
+		bMouseDown = false;
+
+		if (bWasClick && HighlightNodes && OnWidgetPicked.IsBound())
+		{
+			const FVector2D LocalCursor = MyGeometry.AbsoluteToLocal(MouseEvent.GetScreenSpacePosition());
+			const FVector2D AllottedSize = MyGeometry.GetLocalSize();
+			const FVector2D ImageSize = GetImageSize();
+			const float EffectiveZoom = ComputeEffectiveZoom();
+			const FVector2D Position = (AllottedSize - ImageSize * EffectiveZoom) * 0.5f + GetState().Pan;
+			const FVector2D DesignPos = (LocalCursor - Position) / FMath::Max(0.001f, EffectiveZoom);
+
+			const FUnrealGitWidgetNode* Best = nullptr;
+			for (const FUnrealGitWidgetNode& Node : *HighlightNodes)
+			{
+				const bool bHasGeometry = bUseLeftGeometry ? Node.bHasLeftGeometry : Node.bHasRightGeometry;
+				if (!bHasGeometry) continue;
+				const FVector2D NodePos = bUseLeftGeometry ? Node.LeftPosition : Node.RightPosition;
+				const FVector2D NodeSize = bUseLeftGeometry ? Node.LeftSize : Node.RightSize;
+				if (DesignPos.X >= NodePos.X && DesignPos.Y >= NodePos.Y &&
+					DesignPos.X <= NodePos.X + NodeSize.X && DesignPos.Y <= NodePos.Y + NodeSize.Y)
+				{
+					// Pick the deepest widget under the cursor.
+					if (!Best || Node.Depth > Best->Depth)
+					{
+						Best = &Node;
+					}
+				}
+			}
+
+			if (Best)
+			{
+				OnWidgetPicked.Execute(Best->Name);
+			}
+		}
+
 		return FReply::Handled().ReleaseMouseCapture();
 	}
 	return FReply::Unhandled();
@@ -469,6 +520,10 @@ void SUnrealGitWidgetDiffCanvas::SetPreviewContent(TSharedPtr<SWidget> InContent
 {
 	PreviewContent = InContent;
 	DesignSize = InDesignSize;
+	if (PreviewContent.IsValid())
+	{
+		PreviewContent->SetVisibility(EVisibility::HitTestInvisible);
+	}
 	if (PreviewBox.IsValid())
 	{
 		PreviewBox->SetWidthOverride(DesignSize.X > 0.0f ? DesignSize.X : 100.0f);
