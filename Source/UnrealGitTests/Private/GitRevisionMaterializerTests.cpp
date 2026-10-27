@@ -5,7 +5,7 @@
 #include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "UnrealGit/Git/GitRevisionMaterializer.h"
-#include "Mocks/FMockGitProcessRunner.h"
+#include "UnrealGitTests/Private/Mocks/FMockGitProcessRunner.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitRevisionMaterializerTest, "UnrealGit.Revision.MaterializeBinary", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
