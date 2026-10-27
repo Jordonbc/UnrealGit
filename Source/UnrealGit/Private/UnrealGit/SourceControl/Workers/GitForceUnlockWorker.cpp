@@ -2,7 +2,15 @@
 
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitForceUnlockWorker.h"
 
+#include "UnrealGit/Git/Parsers/GitLfsLocksParser.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
+
+static FString NormalizeLockPath(const FString& InPath)
+{
+	FString Result = InPath;
+	Result.ReplaceInline(TEXT("\\"), TEXT("/"));
+	return Result;
+}
 
 FName FGitForceUnlockWorker::GetName() const
 {
@@ -53,12 +61,57 @@ void FGitForceUnlockWorker::Execute(
 		return;
 	}
 
-	FString GitError;
-	if (!UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, { TEXT("lfs"), TEXT("unlock"), TEXT("--force") }, RelativePaths, GitError))
+	// Force unlock by lock ID: `git lfs unlock --force <path>` re-resolves the path itself
+	// and fails when that lookup does not match (case, cwd, server path normalization).
+	FGitProcessRequest LocksRequest;
+	LocksRequest.WorkingDirectory = FString();
+	LocksRequest.RepoRoot = RepoRoot;
+	LocksRequest.Arguments = { TEXT("lfs"), TEXT("locks"), TEXT("--json") };
+
+	const FGitProcessResult LocksResult = ProcessRunner->Run(LocksRequest);
+	if (LocksResult.ExitCode != 0)
 	{
 		OutOutput.bSuccess = false;
-		OutOutput.ErrorText = FText::FromString(GitError);
+		OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(LocksResult.StdErr));
 		return;
+	}
+
+	TArray<FGitLfsLock> Locks;
+	FString LocksError;
+	if (!FGitLfsLocksParser::ParseJson(UnrealGit::Workers::BytesToTextUtf8Lossy(LocksResult.StdOut), Locks, LocksError))
+	{
+		OutOutput.bSuccess = false;
+		OutOutput.ErrorText = FText::FromString(LocksError);
+		return;
+	}
+
+	TMap<FString, FString> LockIdByPath;
+	for (const FGitLfsLock& Lock : Locks)
+	{
+		LockIdByPath.Add(NormalizeLockPath(Lock.Path), Lock.Id);
+	}
+
+	for (const FString& RelativePath : RelativePaths)
+	{
+		const FString* LockId = LockIdByPath.Find(NormalizeLockPath(RelativePath));
+		if (!LockId || LockId->IsEmpty())
+		{
+			// Nothing locked on this path: force unlock is a no-op.
+			continue;
+		}
+
+		FGitProcessRequest UnlockRequest;
+		UnlockRequest.WorkingDirectory = FString();
+		UnlockRequest.RepoRoot = RepoRoot;
+		UnlockRequest.Arguments = { TEXT("lfs"), TEXT("unlock"), TEXT("--force"), TEXT("--id"), *LockId };
+
+		const FGitProcessResult UnlockResult = ProcessRunner->Run(UnlockRequest);
+		if (UnlockResult.ExitCode != 0)
+		{
+			OutOutput.bSuccess = false;
+			OutOutput.ErrorText = FText::FromString(UnrealGit::Workers::BytesToTextUtf8Lossy(UnlockResult.StdErr));
+			return;
+		}
 	}
 
 	OutOutput.bSuccess = true;
