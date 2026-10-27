@@ -568,6 +568,31 @@ void FUnrealGitSourceControlProvider::StartEnvironmentValidation()
 	});
 }
 
+struct FUnrealGitOperationFactory
+{
+	FName Name;
+	TFunction<TUniquePtr<IGitSourceControlWorker>()> Create;
+};
+
+static const TArray<FUnrealGitOperationFactory>& GetOperationFactories()
+{
+	static const TArray<FUnrealGitOperationFactory> Factories = {
+		{ FName(TEXT("UpdateStatus")), []() { return MakeUnique<FGitUpdateStatusWorker>(); } },
+		{ FName(TEXT("Connect")), []() { return MakeUnique<FGitUpdateStatusWorker>(); } },
+		{ FName(TEXT("CheckOut")), []() { return MakeUnique<FGitCheckOutWorker>(); } },
+		{ FName(TEXT("MarkForAdd")), []() { return MakeUnique<FGitMarkForAddWorker>(); } },
+		{ FName(TEXT("Delete")), []() { return MakeUnique<FGitDeleteWorker>(); } },
+		{ FName(TEXT("Copy")), []() { return MakeUnique<FGitCopyWorker>(); } },
+		{ FName(TEXT("Resolve")), []() { return MakeUnique<FGitResolveWorker>(); } },
+		{ FName(TEXT("Revert")), []() { return MakeUnique<FGitRevertWorker>(); } },
+		{ FName(TEXT("CheckIn")), []() { return MakeUnique<FGitCheckInWorker>(); } },
+		{ FName(TEXT("Sync")), []() { return MakeUnique<FGitSyncWorker>(); } },
+		{ FName(TEXT("GetHistory")), []() { return MakeUnique<FGitGetHistoryWorker>(); } },
+		{ FName(TEXT("ForceUnlock")), []() { return MakeUnique<FGitForceUnlockWorker>(); } },
+	};
+	return Factories;
+}
+
 ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	const FSourceControlOperationRef& InOperation,
 	FSourceControlChangelistPtr /*InChangelist*/,
@@ -585,49 +610,13 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	}
 
 	TUniquePtr<IGitSourceControlWorker> Worker;
-	if (OpName == "UpdateStatus" || OpName == "Connect")
+	for (const FUnrealGitOperationFactory& Factory : GetOperationFactories())
 	{
-		Worker = MakeUnique<FGitUpdateStatusWorker>();
-	}
-	else if (OpName == "CheckOut")
-	{
-		Worker = MakeUnique<FGitCheckOutWorker>();
-	}
-	else if (OpName == "MarkForAdd")
-	{
-		Worker = MakeUnique<FGitMarkForAddWorker>();
-	}
-	else if (OpName == "Delete")
-	{
-		Worker = MakeUnique<FGitDeleteWorker>();
-	}
-	else if (OpName == "Copy")
-	{
-		Worker = MakeUnique<FGitCopyWorker>();
-	}
-	else if (OpName == "Resolve")
-	{
-		Worker = MakeUnique<FGitResolveWorker>();
-	}
-	else if (OpName == "Revert")
-	{
-		Worker = MakeUnique<FGitRevertWorker>();
-	}
-	else if (OpName == "CheckIn")
-	{
-		Worker = MakeUnique<FGitCheckInWorker>();
-	}
-	else if (OpName == "Sync")
-	{
-		Worker = MakeUnique<FGitSyncWorker>();
-	}
-	else if (OpName == "GetHistory")
-	{
-		Worker = MakeUnique<FGitGetHistoryWorker>();
-	}
-	else if (OpName == "ForceUnlock")
-	{
-		Worker = MakeUnique<FGitForceUnlockWorker>();
+		if (Factory.Name == OpName)
+		{
+			Worker = Factory.Create();
+			break;
+		}
 	}
 
 	if (!Worker)
@@ -722,18 +711,14 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 bool FUnrealGitSourceControlProvider::CanExecuteOperation(const FSourceControlOperationRef& InOperation) const
 {
 	const FName OpName = InOperation->GetName();
-	return OpName == "UpdateStatus"
-		|| OpName == "Connect"
-		|| OpName == "CheckOut"
-		|| OpName == "MarkForAdd"
-		|| OpName == "Delete"
-		|| OpName == "Copy"
-		|| OpName == "Resolve"
-		|| OpName == "Revert"
-		|| OpName == "CheckIn"
-		|| OpName == "Sync"
-		|| OpName == "GetHistory"
-		|| OpName == "ForceUnlock";
+	for (const FUnrealGitOperationFactory& Factory : GetOperationFactories())
+	{
+		if (Factory.Name == OpName)
+		{
+			return true;
+		}
+	}
+	return false;
 }
 
 bool FUnrealGitSourceControlProvider::CanCancelOperation(const FSourceControlOperationRef& /*InOperation*/) const
@@ -1129,13 +1114,12 @@ void FUnrealGitSourceControlProvider::ApplyLfsLocksToStates(const TOptional<FGit
 	}
 }
 
-void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
+void FUnrealGitSourceControlProvider::ApplyStatusSnapshot(
 	const FSourceControlOperationRef& Operation,
 	const TArray<FString>& Files,
-	const FSourceControlOperationComplete& Delegate,
-	const FUnrealGitWorkerOutput& Output)
+	const FUnrealGitWorkerOutput& Output,
+	bool& bAnyStateChanged)
 {
-	bool bAnyStateChanged = false;
 	const FString OperationName = Operation->GetName().ToString();
 
 	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("Reconcile: Processing operation '%s', bSuccess=%d, HasStatusSnapshot=%d, Files=%d"),
@@ -1194,6 +1178,15 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 			}
 		}
 	}
+}
+
+void FUnrealGitSourceControlProvider::ApplyLockState(
+	const FSourceControlOperationRef& Operation,
+	const TArray<FString>& Files,
+	const FUnrealGitWorkerOutput& Output,
+	bool& bAnyStateChanged)
+{
+	const FString OperationName = Operation->GetName().ToString();
 
 	if (Output.bSuccess && OperationName == TEXT("CheckOut"))
 	{
@@ -1258,7 +1251,10 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 			}
 		}
 	}
+}
 
+void FUnrealGitSourceControlProvider::ApplyReadOnlyPolicy(const FUnrealGitWorkerOutput& Output)
+{
 	if (Output.bSuccess && Output.StatusSnapshot.IsSet())
 	{
 		// Apply read-only state only after lock state is final: a checked-out or locked file
@@ -1275,7 +1271,10 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 			ApplyLocalReadOnlyState(Abs, !StateRef->IsCheckedOut() && !StateRef->IsConflicted());
 		}
 	}
+}
 
+void FUnrealGitSourceControlProvider::BuildHistory(const FUnrealGitWorkerOutput& Output, bool& bAnyStateChanged)
+{
 	if (Output.bSuccess && Output.FileHistoryByAbsoluteFile.Num() > 0 && RevisionMaterializer.IsValid())
 	{
 		for (const TPair<FString, TArray<FGitFileRevision>>& Pair : Output.FileHistoryByAbsoluteFile)
@@ -1311,7 +1310,14 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 			bAnyStateChanged = true;
 		}
 	}
+}
 
+void FUnrealGitSourceControlProvider::NotifyDelegate(
+	const FSourceControlOperationRef& Operation,
+	const FSourceControlOperationComplete& Delegate,
+	const FUnrealGitWorkerOutput& Output,
+	bool& bAnyStateChanged)
+{
 	if (Delegate.IsBound())
 	{
 		Delegate.ExecuteIfBound(Operation, Output.bSuccess ? ECommandResult::Succeeded : ECommandResult::Failed);
@@ -1327,6 +1333,20 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 	{
 		SourceControlStateChanged.Broadcast();
 	}
+}
+
+void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
+	const FSourceControlOperationRef& Operation,
+	const TArray<FString>& Files,
+	const FSourceControlOperationComplete& Delegate,
+	const FUnrealGitWorkerOutput& Output)
+{
+	bool bAnyStateChanged = false;
+	ApplyStatusSnapshot(Operation, Files, Output, bAnyStateChanged);
+	ApplyLockState(Operation, Files, Output, bAnyStateChanged);
+	ApplyReadOnlyPolicy(Output);
+	BuildHistory(Output, bAnyStateChanged);
+	NotifyDelegate(Operation, Delegate, Output, bAnyStateChanged);
 }
 
 void FUnrealGitSourceControlProvider::Tick()
