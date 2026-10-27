@@ -7,6 +7,8 @@
 #include "Misc/ScopeExit.h"
 #include "ISourceControlModule.h"
 
+#include "UnrealGit.h"
+
 namespace
 {
 	FString BytesToTextUtf8Lossy(const TArray<uint8>& Bytes)
@@ -214,6 +216,6 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 	}
 
 	Result.Duration = FTimespan::FromSeconds(FPlatformTime::Seconds() - StartSeconds);
-	UE_LOG(LogSourceControl, VeryVerbose, TEXT("UnrealGit: git completed: exit=%d, duration=%.3fs"), ExitCode, Result.Duration.GetTotalSeconds());
+	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UnrealGit: git completed: exit=%d, duration=%.3fs"), ExitCode, Result.Duration.GetTotalSeconds());
 	return Result;
 }
