@@ -156,9 +156,9 @@ void FUnrealGitWidgetDiffHistoryExtension::Register()
 {
 	UToolMenus* ToolMenus = UToolMenus::Get();
 	if (!ToolMenus)
-{
-	return;
-}
+	{
+		return;
+	}
 	UToolMenu* Menu = ToolMenus->FindMenu(TEXT("RevisionControl.History.ContextMenu"));
 	if (!Menu)
 	{
@@ -174,9 +174,9 @@ void FUnrealGitWidgetDiffHistoryExtension::Unregister()
 {
 	UToolMenus* ToolMenus = UToolMenus::Get();
 	if (!ToolMenus)
-{
-	return;
-}
+	{
+		return;
+	}
 	if (UToolMenu* Menu = ToolMenus->FindMenu(TEXT("RevisionControl.History.ContextMenu")))
 	{
 		Menu->RemoveSection(TEXT("UnrealGitWidgetDiffHistoryDynamic"));
