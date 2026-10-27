@@ -127,7 +127,7 @@ struct FGitRevisionInfo final
 	FString Subject;
 	FString Body;
 
-	/** Human-readable action for this revision ("edit", "add", "delete", "branch", ...). */
+	/** Human-readable action for this revision ("modified", "add", "delete", "branch", "type changed", "unmerged", "unknown"). */
 	FString Action;
 
 	/** 1-based rank within the file history, oldest revision = 1. */

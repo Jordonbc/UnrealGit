@@ -75,6 +75,7 @@ public:
 
 	/**
 	 * Stores the diff result and images and marks the session ready.
+	 * Broadcasts OnUpdated.
 	 * @param InResult Diff result to store.
 	 * @param InImages Rendered images to store.
 	 */
@@ -82,6 +83,7 @@ public:
 
 	/**
 	 * Stores an error message and marks the session in the error state.
+	 * Broadcasts OnUpdated.
 	 * @param InMessage Error message to store.
 	 */
 	void SetError(const FText& InMessage);

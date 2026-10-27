@@ -15,11 +15,12 @@ class IGitProcessRunner;
  *
  * Responsibility:
  * - Exposes revision metadata for Unreal history and diff views.
- * - Materializes file contents via `git show` to a temp file when requested.
+ * - Materializes file contents via `git cat-file --filters <rev>:<path>` (LFS-smudging), with `git show` as a fallback, to a temp file when requested.
  *
  * Threading:
  * - Get supports EConcurrency::Asynchronous and EConcurrency::Synchronous.
- * - Synchronous materialization must not be executed on the game thread.
+ * - Synchronous materialization on the game thread is supported: it offloads the
+ *   work to a worker thread and blocks until it completes.
  */
 class FUnrealGitSourceControlRevision final : public ISourceControlRevision
 {

@@ -12,7 +12,7 @@
  */
 namespace UnrealGit::Git
 {
-	/** Returns the first existing executable from the platform candidate list, or "git" when none matched. */
+	/** Returns the first existing executable from the platform candidate list, or "git" when none matched. @return Resolved git executable path. */
 	FString FindGitBinary();
 
 	/**

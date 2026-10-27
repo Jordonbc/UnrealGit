@@ -14,7 +14,7 @@ class FUnrealGitWidgetDiffTab
 {
 public:
 	/**
-	 * Opens a new tab hosting the given session.
+	 * Stashes the session in a file-static pending slot and invokes the single named widget-diff tab (does not open a new tab).
 	 * @param Session Session to display.
 	 */
 	static void OpenSession(TSharedPtr<FUnrealGitWidgetDiffSession> Session);
@@ -22,7 +22,7 @@ public:
 	static void CloseActive();
 
 	/**
-	 * Returns the pending session waiting to be consumed by the tab.
+	 * Returns the pending session waiting to be consumed by the tab (not cleared on read).
 	 * @return Pending session, or null.
 	 */
 	static TSharedPtr<FUnrealGitWidgetDiffSession> GetPendingWidgetDiffSession();
