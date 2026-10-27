@@ -14,6 +14,7 @@
 #include "Misc/Paths.h"
 #include "SourceControlHelpers.h"
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffRenderer.h"
+#include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffHierarchy.h"
 #include "UnrealGitWidgetDiff/UnrealGitWidgetDiffSession.h"
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffTab.h"
 #include "UnrealGitWidgetDiff/UnrealGitWidgetDiffTypes.h"
@@ -230,6 +231,8 @@ void FUnrealGitWidgetDiffLauncher::Launch(const FString& AssetFileName, const FS
 				}
 			}
 
+			const TArray<FUnrealGitWidgetNode> Hierarchy = FUnrealGitWidgetDiffHierarchy::Build(LeftBlueprint, RightBlueprint);
+
 			FImage LeftImage;
 			FText RenderError;
 			if (!FUnrealGitWidgetDiffRenderer::Render(LeftBlueprint, Mode, LeftImage, RenderError))
@@ -304,6 +307,7 @@ void FUnrealGitWidgetDiffLauncher::Launch(const FString& AssetFileName, const FS
 			Result.Right.Image = PaddedRight;
 			Result.Right.Texture = RightTexture;
 			Result.Right.Error = FText::GetEmpty();
+			Result.Hierarchy = Hierarchy;
 
 			TStrongObjectPtr<UUnrealGitWidgetDiffImages> ImagesPtr(ImagesObj);
 			Session->SetReady(Result, ImagesPtr);

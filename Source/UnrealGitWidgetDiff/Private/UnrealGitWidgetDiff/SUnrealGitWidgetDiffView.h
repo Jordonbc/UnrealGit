@@ -4,6 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
+#include "Widgets/Views/SListView.h"
 #include "UnrealGitWidgetDiff/UnrealGitWidgetDiffSession.h"
 
 class SUnrealGitWidgetDiffView : public SCompoundWidget
@@ -65,4 +66,14 @@ private:
 	FText GetLeftLabel() const;
 	FText GetRightLabel() const;
 	FText GetSummaryText() const;
+
+	TSharedPtr<SListView<TSharedPtr<FUnrealGitWidgetNode>>> HierarchyList;
+	TArray<TSharedPtr<FUnrealGitWidgetNode>> HierarchyItems;
+	TSharedPtr<SListView<TSharedPtr<FString>>> PropertyList;
+	TArray<TSharedPtr<FString>> PropertyItems;
+
+	void RebuildHierarchy();
+	TSharedRef<ITableRow> OnGenerateHierarchyRow(TSharedPtr<FUnrealGitWidgetNode> Item, const TSharedRef<STableViewBase>& OwnerTable);
+	void OnHierarchySelectionChanged(TSharedPtr<FUnrealGitWidgetNode> Item, ESelectInfo::Type SelectInfo);
+	TSharedRef<ITableRow> OnGeneratePropertyRow(TSharedPtr<FString> Item, const TSharedRef<STableViewBase>& OwnerTable);
 };

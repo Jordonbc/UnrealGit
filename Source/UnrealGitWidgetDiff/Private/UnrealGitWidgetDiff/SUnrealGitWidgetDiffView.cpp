@@ -18,9 +18,11 @@
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"
 #include "Widgets/Layout/SSeparator.h"
+#include "Widgets/Layout/SSpacer.h"
 #include "Widgets/Layout/SWidgetSwitcher.h"
 #include "Widgets/SBoxPanel.h"
 #include "Widgets/Text/STextBlock.h"
+#include "Widgets/Views/SListView.h"
 
 #define LOCTEXT_NAMESPACE "UnrealGitWidgetDiffView"
 
@@ -60,6 +62,9 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 
 	ChildSlot
 	[
+		SNew(SBorder)
+		.BorderImage(FAppStyle::GetBrush("ToolPanel.GroupBorder"))
+		[
 		SNew(SVerticalBox)
 
 		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f)
@@ -150,56 +155,103 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 			[ SNew(STextBlock).Text_Lambda([this]() { return FText::Format(LOCTEXT("BlendValue", "{0}%"), FText::AsNumber(FMath::RoundToInt(OnionBlendPercent))); }) ]
 		]
 
-		+ SVerticalBox::Slot().FillHeight(1.0f).Padding(4.0f)
+		+ SVerticalBox::Slot().FillHeight(1.0f)
 		[
-			SNew(SScrollBox)
-			.Orientation(Orient_Vertical)
-			+ SScrollBox::Slot()
+			SNew(SHorizontalBox)
+			// Left: read-only hierarchy tree.
+			+ SHorizontalBox::Slot().AutoWidth()
 			[
-				SAssignNew(Switcher, SWidgetSwitcher)
-			.WidgetIndex_Lambda([this]() { return GetSwitcherIndex(); })
-
-			+ SWidgetSwitcher::Slot()
-			[ SNew(STextBlock).Text(LOCTEXT("Loading", "Loading...")).Justification(ETextJustify::Center) ]
-
-			+ SWidgetSwitcher::Slot()
-			[
-				SNew(STextBlock)
-				.Text_Lambda([this]()
-				{
-					if (Session.IsValid())
-					{
-						if (!Session->StatusMessage.IsEmpty()) return Session->StatusMessage;
-						if (!Session->Result.Error.IsEmpty()) return Session->Result.Error;
-					}
-					return LOCTEXT("Error", "Error");
-				})
-				.Justification(ETextJustify::Center)
+				SNew(SBox).WidthOverride(260.0f)
+				[
+					SNew(SBorder).Padding(4.0f)
+					[
+						SAssignNew(HierarchyList, SListView<TSharedPtr<FUnrealGitWidgetNode>>)
+						.ListItemsSource(&HierarchyItems)
+						.OnGenerateRow(this, &SUnrealGitWidgetDiffView::OnGenerateHierarchyRow)
+						.OnSelectionChanged(this, &SUnrealGitWidgetDiffView::OnHierarchySelectionChanged)
+						.SelectionMode(ESelectionMode::Single)
+					]
+				]
 			]
-
-			+ SWidgetSwitcher::Slot()
-			[ SNew(STextBlock).Text(LOCTEXT("Empty", "No diff available.")).Justification(ETextJustify::Center) ]
-
-			+ SWidgetSwitcher::Slot()
+			+ SHorizontalBox::Slot().AutoWidth()
+			[ SNew(SSeparator).Orientation(Orient_Vertical) ]
+			// Center: dual preview canvases.
+			+ SHorizontalBox::Slot().FillWidth(1.0f)
 			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(1.0f)
-				[ SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
-					[ SNew(SImage).Image(this, &SUnrealGitWidgetDiffView::GetLeftBrush) ] ]
-				+ SHorizontalBox::Slot().FillWidth(1.0f)
-				[ SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
-					[ SNew(SImage).Image(this, &SUnrealGitWidgetDiffView::GetRightBrush) ] ]
+				SNew(SScrollBox)
+				.Orientation(Orient_Vertical)
+				+ SScrollBox::Slot()
+				[
+					SAssignNew(Switcher, SWidgetSwitcher)
+					.WidgetIndex_Lambda([this]() { return GetSwitcherIndex(); })
+
+					+ SWidgetSwitcher::Slot()
+					[ SNew(STextBlock).Text(LOCTEXT("Loading", "Loading...")).Justification(ETextJustify::Center) ]
+
+					+ SWidgetSwitcher::Slot()
+					[
+						SNew(STextBlock)
+						.Text_Lambda([this]()
+						{
+							if (Session.IsValid())
+							{
+								if (!Session->StatusMessage.IsEmpty()) return Session->StatusMessage;
+								if (!Session->Result.Error.IsEmpty()) return Session->Result.Error;
+							}
+							return LOCTEXT("Error", "Error");
+						})
+						.Justification(ETextJustify::Center)
+					]
+
+					+ SWidgetSwitcher::Slot()
+					[ SNew(STextBlock).Text(LOCTEXT("Empty", "No diff available.")).Justification(ETextJustify::Center) ]
+
+					+ SWidgetSwitcher::Slot()
+					[
+						SNew(SHorizontalBox)
+						+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(2.0f)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)
+							[ SNew(STextBlock).Text_Lambda([this]() { return GetLeftLabel(); }) ]
+							+ SVerticalBox::Slot().FillHeight(1.0f).HAlign(HAlign_Center).VAlign(VAlign_Center)
+							[ SNew(SImage).Image(this, &SUnrealGitWidgetDiffView::GetLeftBrush) ]
+						]
+						+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(2.0f)
+						[
+							SNew(SVerticalBox)
+							+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)
+							[ SNew(STextBlock).Text_Lambda([this]() { return GetRightLabel(); }) ]
+							+ SVerticalBox::Slot().FillHeight(1.0f).HAlign(HAlign_Center).VAlign(VAlign_Center)
+							[ SNew(SImage).Image(this, &SUnrealGitWidgetDiffView::GetRightBrush) ]
+						]
+					]
+
+					+ SWidgetSwitcher::Slot()
+					[ SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						[ SNew(SImage).Image(this, &SUnrealGitWidgetDiffView::GetDiffBrush) ] ]
+
+					+ SWidgetSwitcher::Slot()
+					[ SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
+						[ SNew(SImage).Image(this, &SUnrealGitWidgetDiffView::GetRightBrush)
+							.ColorAndOpacity_Lambda([this]() { return FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, OnionBlendPercent / 100.0f)); }) ] ]
+				]
 			]
-
-			+ SWidgetSwitcher::Slot()
-			[ SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
-				[ SNew(SImage).Image(this, &SUnrealGitWidgetDiffView::GetDiffBrush) ] ]
-
-			+ SWidgetSwitcher::Slot()
-			[ SNew(SBox).HAlign(HAlign_Center).VAlign(VAlign_Center)
-				[ SNew(SImage).Image(this, &SUnrealGitWidgetDiffView::GetRightBrush)
-					.ColorAndOpacity_Lambda([this]() { return FSlateColor(FLinearColor(1.0f, 1.0f, 1.0f, OnionBlendPercent / 100.0f)); }) ] ]
-		]
+			+ SHorizontalBox::Slot().AutoWidth()
+			[ SNew(SSeparator).Orientation(Orient_Vertical) ]
+			// Right: read-only changed-properties list.
+			+ SHorizontalBox::Slot().AutoWidth()
+			[
+				SNew(SBox).WidthOverride(300.0f)
+				[
+					SNew(SBorder).Padding(4.0f)
+					[
+						SAssignNew(PropertyList, SListView<TSharedPtr<FString>>)
+						.ListItemsSource(&PropertyItems)
+						.OnGenerateRow(this, &SUnrealGitWidgetDiffView::OnGeneratePropertyRow)
+					]
+				]
+			]
 		]
 
 		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f)
@@ -212,14 +264,15 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 				+ SHorizontalBox::Slot().FillWidth(1.0f)[ SNew(STextBlock).Text_Lambda([this]() { return GetSummaryText(); }) ]
 			]
 		]
+		]
 	];
 
 	UpdateBrushes();
+	RebuildHierarchy();
 	if (Session.IsValid())
 	{
 		OnUpdatedHandle = Session->OnUpdated.AddRaw(this, &SUnrealGitWidgetDiffView::OnSessionUpdated);
 	}
-	RequestRefresh();
 }
 
 void SUnrealGitWidgetDiffView::OnSessionUpdated()
@@ -230,6 +283,7 @@ void SUnrealGitWidgetDiffView::OnSessionUpdated()
 void SUnrealGitWidgetDiffView::RequestRefresh()
 {
 	UpdateBrushes();
+	RebuildHierarchy();
 	if (Switcher.IsValid())
 	{
 		Switcher->SetActiveWidgetIndex(GetSwitcherIndex());
@@ -243,14 +297,11 @@ void SUnrealGitWidgetDiffView::UpdateBrushes()
 	UTexture2D* RightTex = nullptr;
 	UTexture2D* DiffTex = nullptr;
 
-	if (Session.IsValid())
+	if (Session.IsValid() && Session->Images.IsValid())
 	{
-		if (Session->Images.IsValid())
-		{
-			LeftTex = Session->Images->LeftTexture;
-			RightTex = Session->Images->RightTexture;
-			DiffTex = Session->Images->DiffTexture;
-		}
+		LeftTex = Session->Images->LeftTexture;
+		RightTex = Session->Images->RightTexture;
+		DiffTex = Session->Images->DiffTexture;
 	}
 
 	if (bSwapped)
@@ -268,14 +319,95 @@ void SUnrealGitWidgetDiffView::UpdateBrushes()
 void SUnrealGitWidgetDiffView::UpdateBrush(FSlateBrush& Brush, UTexture2D* Texture)
 {
 	Brush.SetResourceObject(Texture);
-	if (Texture)
-	{
-		Brush.ImageSize = FVector2D((float)Texture->GetSizeX(), (float)Texture->GetSizeY());
-	}
-	else
+	if (!Texture)
 	{
 		Brush.ImageSize = FVector2D(0.0f, 0.0f);
+		return;
 	}
+
+	FVector2D Size((float)Texture->GetSizeX(), (float)Texture->GetSizeY());
+	if (bFitToWindow)
+	{
+		const float Fit = FMath::Min(1.0f, FMath::Min(1200.0f / FMath::Max(1.0f, Size.X), 800.0f / FMath::Max(1.0f, Size.Y)));
+		Size *= Fit;
+	}
+	Brush.ImageSize = Size;
+}
+
+void SUnrealGitWidgetDiffView::RebuildHierarchy()
+{
+	if (!Session.IsValid() || Session->State != EUnrealGitWidgetDiffState::Ready)
+	{
+		return;
+	}
+
+	HierarchyItems.Reset();
+	for (const FUnrealGitWidgetNode& Node : Session->Result.Hierarchy)
+	{
+		HierarchyItems.Add(MakeShared<FUnrealGitWidgetNode>(Node));
+	}
+
+	if (HierarchyList.IsValid())
+	{
+		HierarchyList->RequestListRefresh();
+	}
+	if (PropertyList.IsValid())
+	{
+		PropertyList->RequestListRefresh();
+	}
+}
+
+TSharedRef<ITableRow> SUnrealGitWidgetDiffView::OnGenerateHierarchyRow(TSharedPtr<FUnrealGitWidgetNode> Item, const TSharedRef<STableViewBase>& OwnerTable)
+{
+	FLinearColor Color(0.7f, 0.7f, 0.7f, 1.0f);
+	if (Item.IsValid())
+	{
+		switch (Item->Change)
+		{
+		case EUnrealGitWidgetChange::Added: Color = FLinearColor(0.3f, 0.9f, 0.3f, 1.0f); break;
+		case EUnrealGitWidgetChange::Removed: Color = FLinearColor(1.0f, 0.3f, 0.3f, 1.0f); break;
+		case EUnrealGitWidgetChange::Modified: Color = FLinearColor(1.0f, 0.8f, 0.2f, 1.0f); break;
+		default: Color = FLinearColor(0.75f, 0.75f, 0.75f, 1.0f); break;
+		}
+	}
+
+	const float Indent = Item.IsValid() ? Item->Depth * 12.0f : 0.0f;
+	return SNew(STableRow<TSharedPtr<FUnrealGitWidgetNode>>, OwnerTable)
+	[
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth()
+		[ SNew(SSpacer).Size(FVector2D(Indent, 1.0f)) ]
+		+ SHorizontalBox::Slot().AutoWidth()
+		[ SNew(STextBlock).Text(FText::FromString(Item.IsValid() ? Item->Name : FString())).ColorAndOpacity(FSlateColor(Color)) ]
+		+ SHorizontalBox::Slot().AutoWidth().Padding(6.0f, 0.0f, 0.0f, 0.0f)
+		[ SNew(STextBlock).Text(FText::FromString(Item.IsValid() ? Item->TypeName : FString())).ColorAndOpacity(FSlateColor(FLinearColor(0.45f, 0.45f, 0.45f, 1.0f))) ]
+	];
+}
+
+void SUnrealGitWidgetDiffView::OnHierarchySelectionChanged(TSharedPtr<FUnrealGitWidgetNode> Item, ESelectInfo::Type /*SelectInfo*/)
+{
+	PropertyItems.Reset();
+	if (Item.IsValid())
+	{
+		for (const FString& Property : Item->ChangedProperties)
+		{
+			PropertyItems.Add(MakeShared<FString>(Property));
+		}
+	}
+	if (PropertyList.IsValid())
+	{
+		PropertyList->RequestListRefresh();
+	}
+}
+
+TSharedRef<ITableRow> SUnrealGitWidgetDiffView::OnGeneratePropertyRow(TSharedPtr<FString> Item, const TSharedRef<STableViewBase>& OwnerTable)
+{
+	return SNew(STableRow<TSharedPtr<FString>>, OwnerTable)
+	[
+		SNew(STextBlock)
+		.Text(FText::FromString(Item.IsValid() ? *Item : FString()))
+		.ColorAndOpacity(FSlateColor(FLinearColor(0.85f, 0.85f, 0.85f, 1.0f)))
+	];
 }
 
 int32 SUnrealGitWidgetDiffView::GetSwitcherIndex() const
@@ -339,8 +471,7 @@ FText SUnrealGitWidgetDiffView::GetLeftLabel() const
 {
 	if (Session.IsValid())
 	{
-		if (bSwapped) return Session->Result.Right.Label;
-		return Session->Result.Left.Label;
+		return bSwapped ? Session->Result.Right.Label : Session->Result.Left.Label;
 	}
 	return FText::GetEmpty();
 }
@@ -349,8 +480,7 @@ FText SUnrealGitWidgetDiffView::GetRightLabel() const
 {
 	if (Session.IsValid())
 	{
-		if (bSwapped) return Session->Result.Left.Label;
-		return Session->Result.Right.Label;
+		return bSwapped ? Session->Result.Left.Label : Session->Result.Right.Label;
 	}
 	return FText::GetEmpty();
 }

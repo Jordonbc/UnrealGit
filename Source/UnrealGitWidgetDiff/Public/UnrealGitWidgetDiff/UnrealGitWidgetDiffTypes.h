@@ -24,6 +24,30 @@ struct FUnrealGitWidgetDiffSide
 	FText Error;
 };
 
+/** Change state of a widget node between the two revisions. */
+enum class EUnrealGitWidgetChange : uint8
+{
+	Unchanged,
+	Added,
+	Removed,
+	Modified,
+};
+
+/** One row in the read-only widget hierarchy tree. */
+struct FUnrealGitWidgetNode
+{
+	FString Name;
+	FString TypeName;
+	int32 Depth = 0;
+	int32 ParentIndex = INDEX_NONE;
+	EUnrealGitWidgetChange Change = EUnrealGitWidgetChange::Unchanged;
+	TArray<FString> ChangedProperties;
+	/** Index into the flattened pre-order array of the left tree, or INDEX_NONE if added. */
+	int32 LeftIndex = INDEX_NONE;
+	/** Index into the flattened pre-order array of the right tree, or INDEX_NONE if removed. */
+	int32 RightIndex = INDEX_NONE;
+};
+
 /**
  * Result of comparing two widget blueprint revisions.
  */
@@ -48,4 +72,7 @@ struct FUnrealGitWidgetDiffResult
 	FImage DiffImage;
 	/** Texture created from DiffImage. */
 	TObjectPtr<class UTexture2D> DiffTexture = nullptr;
+
+	/** Flattened pre-order widget hierarchy with change markers. */
+	TArray<FUnrealGitWidgetNode> Hierarchy;
 };
