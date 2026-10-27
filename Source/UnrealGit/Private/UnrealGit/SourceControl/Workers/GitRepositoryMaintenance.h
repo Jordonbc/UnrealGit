@@ -15,7 +15,7 @@ namespace UnrealGit::Workers
 	/**
 	 * Attempts to rebuild a corrupted Git index by deleting it and running `git reset`.
 	 *
-	 * @param ProcessRunner Process runner used to invoke Git (may be null).
+	 * @param ProcessRunner Process runner used to invoke Git.
 	 * @param RepoRoot Repository root path.
 	 * @return True when the index was rebuilt successfully.
 	 */
