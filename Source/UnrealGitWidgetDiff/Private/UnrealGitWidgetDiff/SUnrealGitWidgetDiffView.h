@@ -47,6 +47,16 @@ private:
 	TArray<FUnrealGitWidgetNode> CanvasNodes;
 	FString SelectedNodeName;
 
+	TStrongObjectPtr<class UUserWidget> LeftLiveWidget;
+	TStrongObjectPtr<class UUserWidget> RightLiveWidget;
+	TSharedPtr<SWidget> LeftPreviewWidget;
+	TSharedPtr<SWidget> RightPreviewWidget;
+	FVector2D LeftDesignSize = FVector2D::ZeroVector;
+	FVector2D RightDesignSize = FVector2D::ZeroVector;
+	bool bLivePreviewsBuilt = false;
+
+	void EnsureLivePreviews();
+
 	bool bFitToWindow = true;
 	bool bSwapped = false;
 	bool bShowPixelOverlay = false;

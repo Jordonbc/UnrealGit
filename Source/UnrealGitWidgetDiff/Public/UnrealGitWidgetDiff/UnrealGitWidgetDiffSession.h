@@ -25,6 +25,13 @@ public:
 
 	UPROPERTY()
 	TObjectPtr<UTexture2D> HighlightTexture = nullptr;
+
+	/** Live blueprints kept alive so the view can host their Slate widgets. */
+	UPROPERTY()
+	TObjectPtr<class UWidgetBlueprint> LeftBlueprint = nullptr;
+
+	UPROPERTY()
+	TObjectPtr<class UWidgetBlueprint> RightBlueprint = nullptr;
 };
 
 enum class EUnrealGitWidgetDiffState : uint8

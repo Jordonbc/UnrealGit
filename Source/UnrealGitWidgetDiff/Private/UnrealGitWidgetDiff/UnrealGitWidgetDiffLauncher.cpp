@@ -304,6 +304,8 @@ void FUnrealGitWidgetDiffLauncher::Launch(const FString& AssetFileName, const FS
 			ImagesObj->RightTexture = RightTexture;
 			ImagesObj->DiffTexture = DiffTexture;
 			ImagesObj->HighlightTexture = HighlightTexture;
+			ImagesObj->LeftBlueprint = LeftBlueprint;
+			ImagesObj->RightBlueprint = RightBlueprint;
 
 			FUnrealGitWidgetDiffResult Result;
 			Result.bSuccess = true;

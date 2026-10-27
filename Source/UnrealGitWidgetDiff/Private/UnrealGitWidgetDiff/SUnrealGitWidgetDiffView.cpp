@@ -8,8 +8,13 @@
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffLauncher.h"
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/SUnrealGitWidgetDiffCanvas.h"
 
+#include "Blueprint/UserWidget.h"
+#include "Editor.h"
 #include "Engine/Texture2D.h"
 #include "Styling/AppStyle.h"
+#include "WidgetBlueprint.h"
+#include "WidgetBlueprintEditorUtils.h"
+#include "Widgets/SVirtualWindow.h"
 #include "Widgets/Images/SImage.h"
 #include "Widgets/Input/SButton.h"
 #include "Widgets/Input/SCheckBox.h"
@@ -354,8 +359,74 @@ void SUnrealGitWidgetDiffView::OnSessionUpdated()
 	RequestRefresh();
 }
 
+void SUnrealGitWidgetDiffView::EnsureLivePreviews()
+{
+	if (bLivePreviewsBuilt || !Session.IsValid() || Session->State != EUnrealGitWidgetDiffState::Ready || !Session->Images.IsValid())
+	{
+		return;
+	}
+
+	auto Build = [](UWidgetBlueprint* Blueprint, TStrongObjectPtr<UUserWidget>& OutWidget, TSharedPtr<SWidget>& OutSlate, FVector2D& OutSize)
+	{
+		if (!Blueprint || !Blueprint->GeneratedClass)
+		{
+			return;
+		}
+		UWorld* World = GEditor ? GEditor->GetEditorWorldContext().World() : nullptr;
+		if (!World)
+		{
+			return;
+		}
+
+		UUserWidget* Widget = NewObject<UUserWidget>(World, Blueprint->GeneratedClass, NAME_None, RF_Transient);
+		if (!Widget)
+		{
+			return;
+		}
+		Widget->SetDesignerFlags(EWidgetDesignFlags::Designing | EWidgetDesignFlags::ExecutePreConstruct);
+		if (!Widget->Initialize())
+		{
+			return;
+		}
+
+		TSharedPtr<SWidget> SlateWidget = Widget->TakeWidget();
+		if (!SlateWidget.IsValid())
+		{
+			return;
+		}
+
+		TSharedRef<SVirtualWindow> Window = SNew(SVirtualWindow);
+		Window->SetContent(SlateWidget.ToSharedRef());
+		Window->Resize(FVector2D(1024.0f, 1024.0f));
+		Window->SlatePrepass(1.0f);
+		const FVector2D UnscaledSize = FWidgetBlueprintEditorUtils::GetWidgetPreviewUnScaledCustomSize(
+			Window->GetDesiredSize(),
+			Widget,
+			TOptional<FVector2D>(),
+			EThumbnailPreviewSizeMode::MatchDesignerMode);
+
+		OutWidget = TStrongObjectPtr<UUserWidget>(Widget);
+		OutSlate = SlateWidget;
+		OutSize = UnscaledSize;
+	};
+
+	Build(Session->Images->LeftBlueprint, LeftLiveWidget, LeftPreviewWidget, LeftDesignSize);
+	Build(Session->Images->RightBlueprint, RightLiveWidget, RightPreviewWidget, RightDesignSize);
+	bLivePreviewsBuilt = true;
+
+	if (LeftCanvas.IsValid())
+	{
+		LeftCanvas->SetPreviewContent(LeftPreviewWidget, LeftDesignSize);
+	}
+	if (RightCanvas.IsValid())
+	{
+		RightCanvas->SetPreviewContent(RightPreviewWidget, RightDesignSize);
+	}
+}
+
 void SUnrealGitWidgetDiffView::RequestRefresh()
 {
+	EnsureLivePreviews();
 	UpdateBrushes();
 	RebuildHierarchy();
 	if (Switcher.IsValid())

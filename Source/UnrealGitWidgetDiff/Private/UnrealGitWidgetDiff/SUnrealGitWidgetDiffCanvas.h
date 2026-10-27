@@ -4,7 +4,7 @@
 
 #include "CoreMinimal.h"
 #include "UnrealGitWidgetDiff/UnrealGitWidgetDiffTypes.h"
-#include "Widgets/SLeafWidget.h"
+#include "Widgets/SCompoundWidget.h"
 
 /** Shared zoom/pan state for synchronised diff canvases. */
 struct FUnrealGitWidgetDiffCanvasState
@@ -14,11 +14,11 @@ struct FUnrealGitWidgetDiffCanvasState
 };
 
 /**
- * Read-only zoom/pan canvas that draws a base image plus an optional
- * highlight overlay (changed pixels) on top. When several canvases share a
- * state object their zoom/pan stay in sync.
+ * Read-only UMG preview viewport. Hosts the live Slate widget hierarchy so
+ * text and geometry stay sharp at any zoom, and draws the UMG Designer grid,
+ * rulers, design boundary and diff overlays in the same coordinate system.
  */
-class SUnrealGitWidgetDiffCanvas : public SLeafWidget
+class SUnrealGitWidgetDiffCanvas : public SCompoundWidget
 {
 public:
 	SLATE_BEGIN_ARGS(SUnrealGitWidgetDiffCanvas) {}
@@ -30,10 +30,13 @@ public:
 		SLATE_ARGUMENT(TArray<FUnrealGitWidgetNode>*, HighlightNodes)
 		SLATE_ARGUMENT(bool, UseLeftGeometry)
 		SLATE_ATTRIBUTE(FString, SelectedNode)
+		SLATE_ARGUMENT(TSharedPtr<SWidget>, PreviewContent)
+		SLATE_ARGUMENT(FVector2D, DesignSize)
 	SLATE_END_ARGS()
 
 	void Construct(const FArguments& InArgs);
 
+	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 	virtual int32 OnPaint(const FPaintArgs& Args, const FGeometry& AllottedGeometry, const FSlateRect& MyCullingRect, FSlateWindowElementList& OutDrawElements, int32 LayerId, const FWidgetStyle& InWidgetStyle, bool bParentEnabled) const override;
 	virtual FVector2D ComputeDesiredSize(float LayoutScaleMultiplier) const override;
 
@@ -44,10 +47,13 @@ public:
 
 	void ResetView();
 	float GetZoom() const;
+	void SetPreviewContent(TSharedPtr<SWidget> InContent, FVector2D InDesignSize);
 
 private:
 	FVector2D GetImageSize() const;
 	FUnrealGitWidgetDiffCanvasState& GetState() const;
+	void PaintGrid(const FGeometry& AllottedGeometry, const FVector2D& Position, float EffectiveZoom, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
+	void PaintOverlays(const FGeometry& AllottedGeometry, const FVector2D& Position, float EffectiveZoom, FSlateWindowElementList& OutDrawElements, int32 LayerId) const;
 
 	TAttribute<const FSlateBrush*> BaseBrush;
 	TAttribute<const FSlateBrush*> OverlayBrush;
@@ -56,9 +62,19 @@ private:
 
 	TSharedPtr<FUnrealGitWidgetDiffCanvasState> TransformState;
 	mutable TSharedPtr<FUnrealGitWidgetDiffCanvasState> LocalState;
+
 	TArray<FUnrealGitWidgetNode>* HighlightNodes = nullptr;
 	bool bUseLeftGeometry = true;
 	TAttribute<FString> SelectedNode;
+
+	TSharedPtr<SWidget> PreviewContent;
+	TSharedPtr<class SZoomPan> PreviewZoomPan;
+	TSharedPtr<class SBox> PreviewBox;
+	FVector2D DesignSize = FVector2D::ZeroVector;
+
+	float ComputeEffectiveZoom() const;
+	FVector2D ComputeViewOffset() const;
+	void RebuildZoomPan();
 
 	bool bPanning = false;
 	FVector2D LastMousePosition = FVector2D::ZeroVector;
