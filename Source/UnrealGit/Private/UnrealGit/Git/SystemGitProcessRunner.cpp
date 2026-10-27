@@ -135,7 +135,11 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 	auto ReadAllAvailable = [](void* ReadPipe, TArray<uint8>& OutBytes)
 	{
 #if ENGINE_MAJOR_VERSION > 5 || (ENGINE_MAJOR_VERSION == 5 && ENGINE_MINOR_VERSION >= 4)
-		FPlatformProcess::ReadPipeToArray(ReadPipe, OutBytes);
+		TArray<uint8> Chunk;
+		while (FPlatformProcess::ReadPipeToArray(ReadPipe, Chunk))
+		{
+			OutBytes.Append(Chunk);
+		}
 #else
 		const FString Text = FPlatformProcess::ReadPipe(ReadPipe);
 		FTCHARToUTF8 Utf8(*Text);
