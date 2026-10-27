@@ -210,7 +210,7 @@ namespace UnrealGit::Workers
 			TEXT("--date=iso-strict"),
 			TEXT("--name-status"),
 			TEXT("-z"),
-			TEXT("--pretty=format:%x1e%H%x1f%an%x1f%ae%x1f%ad%x1f%s"),
+			TEXT("--pretty=format:%x1e%H%x1f%an%x1f%ae%x1f%ad%x1f%s%x0a"),
 			TEXT("--"),
 			Relative,
 		};

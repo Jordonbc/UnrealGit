@@ -131,8 +131,12 @@ bool FGitFileHistoryParser::Parse(const TArray<uint8>& StdOut, const FString& In
 			continue;
 		}
 
-		// Skip newline.
+		// Skip newline(s) separating metadata from name-status.
 		int32 NameStatusOffset = LineEnd + 1;
+		while (NameStatusOffset < RecordView.Num() && RecordView[NameStatusOffset] == Newline)
+		{
+			++NameStatusOffset;
+		}
 		if (NameStatusOffset >= RecordView.Num())
 		{
 			continue;
