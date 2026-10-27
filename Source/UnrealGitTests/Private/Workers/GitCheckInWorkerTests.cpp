@@ -4,8 +4,8 @@
 #include "Misc/Paths.h"
 #include "SourceControlOperations.h"
 #include "UnrealGit/Settings/UnrealGitProviderSettings.h"
-#include "Mocks/FMockGitProcessRunner.h"
 #include "UnrealGit/SourceControl/Workers/GitCheckInWorker.h"
+#include "UnrealGitTests/Private/Mocks/FMockGitProcessRunner.h"
 
 IMPLEMENT_SIMPLE_AUTOMATION_TEST(FUnrealGitCheckInWorkerTest, "UnrealGit.Workers.CheckInSequencing", EAutomationTestFlags::EditorContext | EAutomationTestFlags::EngineFilter)
 
