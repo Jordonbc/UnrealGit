@@ -1,3 +1,5 @@
+// Copyright (C) 2026 Jordon Brooks. All Rights Reserved.
+
 #include "SUnrealGitSettingsWidget.h"
 
 #include "UnrealGit/SourceControl/UnrealGitSourceControlProvider.h"
