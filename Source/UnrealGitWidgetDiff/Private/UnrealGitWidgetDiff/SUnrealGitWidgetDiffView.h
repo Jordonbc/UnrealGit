@@ -19,6 +19,7 @@ public:
 	virtual ~SUnrealGitWidgetDiffView() override;
 
 	void Construct(const FArguments& InArgs);
+	virtual void Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime) override;
 
 private:
 	enum class EViewMode : uint8 { SideBySide, Difference, Onion };
@@ -91,6 +92,8 @@ private:
 	TArray<TSharedPtr<FUnrealGitWidgetNode>> HierarchyRoots;
 
 	void OnGetHierarchyChildren(TSharedPtr<FUnrealGitWidgetNode> Item, TArray<TSharedPtr<FUnrealGitWidgetNode>>& OutChildren) const;
+	void OnHierarchyRowClicked(TSharedPtr<FUnrealGitWidgetNode> Item);
+	void FocusWidgetNode(const FUnrealGitWidgetNode& Node);
 	struct FDiffEntry
 	{
 		FString Name;

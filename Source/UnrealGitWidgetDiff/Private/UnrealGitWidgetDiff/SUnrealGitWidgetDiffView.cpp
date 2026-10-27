@@ -185,6 +185,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 						.OnGenerateRow(this, &SUnrealGitWidgetDiffView::OnGenerateHierarchyRow)
 						.OnGetChildren(this, &SUnrealGitWidgetDiffView::OnGetHierarchyChildren)
 						.OnSelectionChanged(this, &SUnrealGitWidgetDiffView::OnHierarchySelectionChanged)
+						.OnMouseButtonClick(this, &SUnrealGitWidgetDiffView::OnHierarchyRowClicked)
 						.SelectionMode(ESelectionMode::Single)
 					]
 				]
@@ -341,6 +342,55 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 void SUnrealGitWidgetDiffView::OnSessionUpdated()
 {
 	RequestRefresh();
+}
+
+void SUnrealGitWidgetDiffView::Tick(const FGeometry& AllottedGeometry, const double InCurrentTime, const float InDeltaTime)
+{
+	SCompoundWidget::Tick(AllottedGeometry, InCurrentTime, InDeltaTime);
+
+	if (LeftCanvas.IsValid()) LeftCanvas->TickPendingFocus();
+	if (RightCanvas.IsValid()) RightCanvas->TickPendingFocus();
+	if (DiffCanvas.IsValid()) DiffCanvas->TickPendingFocus();
+}
+
+void SUnrealGitWidgetDiffView::OnHierarchyRowClicked(TSharedPtr<FUnrealGitWidgetNode> Item)
+{
+	if (Item.IsValid())
+	{
+		FocusWidgetNode(*Item);
+	}
+}
+
+void SUnrealGitWidgetDiffView::FocusWidgetNode(const FUnrealGitWidgetNode& Node)
+{
+	if (Node.Name.IsEmpty())
+	{
+		return;
+	}
+
+	switch (ViewMode)
+	{
+	case EViewMode::SideBySide:
+		// Reveal inside scroll boxes on both revisions, then centre one of them;
+		// both canvases share the pan state.
+		if (LeftCanvas.IsValid())
+		{
+			LeftCanvas->FocusNode(Node.Name);
+		}
+		if (RightCanvas.IsValid())
+		{
+			RightCanvas->FocusNode(Node.Name);
+		}
+		break;
+	case EViewMode::Difference:
+		if (DiffCanvas.IsValid())
+		{
+			DiffCanvas->FocusNode(Node.Name);
+		}
+		break;
+	default:
+		break;
+	}
 }
 
 void SUnrealGitWidgetDiffView::EnsureLivePreviews()

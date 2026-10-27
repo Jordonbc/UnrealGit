@@ -62,6 +62,16 @@ public:
 	float GetZoom() const;
 	void SetPreviewContent(TSharedPtr<SWidget> InContent, FVector2D InDesignSize, UUserWidget* InPreviewWidget = nullptr);
 
+	/**
+	 * Reveals and centres the named widget. Ancestor scroll boxes in the live
+	 * preview are scrolled so the widget becomes visible; the shared pan is then
+	 * centred on its design-space bounds.
+	 * @return true when this canvas found the widget and scheduled the focus.
+	 */
+	bool FocusNode(const FString& NodeName);
+	/** Applies a scheduled focus once the live geometry has settled. */
+	void TickPendingFocus();
+
 private:
 	FVector2D GetImageSize() const;
 	FUnrealGitWidgetDiffCanvasState& GetState() const;
@@ -89,10 +99,17 @@ private:
 	TWeakObjectPtr<UUserWidget> PreviewWidget;
 	/** Last live geometry captured during paint, used for click picking in Designer space. */
 	mutable TMap<FString, FBox2D> LiveRectCache;
+	/** Pending focus target, applied by TickPendingFocus after the live layout settles. */
+	FString PendingFocusNode;
+	int32 PendingFocusTicks = 0;
+	int32 PendingFocusRetries = 0;
 
 	float ComputeEffectiveZoom() const;
 	FVector2D ComputeViewOffset() const;
 	void RebuildZoomPan();
+	void CenterOn(const FVector2D& ImageSize, const FVector2D& Center);
+	/** Reveals the named widget in this live preview's scroll boxes. */
+	bool RevealNodeInScrollBoxes(const FString& NodeName);
 
 	FOnWidgetPicked OnWidgetPicked;
 

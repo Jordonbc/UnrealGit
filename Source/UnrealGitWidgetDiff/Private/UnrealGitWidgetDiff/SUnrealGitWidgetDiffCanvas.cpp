@@ -4,6 +4,7 @@
 
 #include "Blueprint/UserWidget.h"
 #include "Blueprint/WidgetTree.h"
+#include "Components/ScrollBox.h"
 #include "Components/Widget.h"
 #include "Designer/SZoomPan.h"
 #include "Rendering/DrawElements.h"
@@ -846,7 +847,133 @@ void SUnrealGitWidgetDiffCanvas::ResetView()
 	FUnrealGitWidgetDiffCanvasState& State = GetState();
 	State.Zoom = 1.0f;
 	State.Pan = FVector2D::ZeroVector;
+	PendingFocusNode.Reset();
+	PendingFocusTicks = 0;
+	PendingFocusRetries = 0;
 	Invalidate(EInvalidateWidget::Paint);
+}
+
+bool SUnrealGitWidgetDiffCanvas::RevealNodeInScrollBoxes(const FString& NodeName)
+{
+	UUserWidget* LiveWidget = PreviewWidget.Get();
+	if (!LiveWidget || !LiveWidget->WidgetTree)
+	{
+		return false;
+	}
+
+	UWidget* Target = LiveWidget->WidgetTree->FindWidget(FName(*NodeName));
+	if (!Target)
+	{
+		return false;
+	}
+
+	// Scroll every ancestor scroll box so the widget is centred inside its
+	// viewport; a scroll-box child can otherwise sit outside the visible area.
+	for (UWidget* Parent = Target->GetParent(); Parent; Parent = Parent->GetParent())
+	{
+		if (UScrollBox* ScrollBox = Cast<UScrollBox>(Parent))
+		{
+			ScrollBox->ScrollWidgetIntoView(Target, /*AnimateScroll*/ false, EDescendantScrollDestination::Center);
+		}
+	}
+
+	return true;
+}
+
+bool SUnrealGitWidgetDiffCanvas::FocusNode(const FString& NodeName)
+{
+	if (NodeName.IsEmpty())
+	{
+		return false;
+	}
+
+	if (PreviewWidget.IsValid())
+	{
+		if (!RevealNodeInScrollBoxes(NodeName))
+		{
+			return false;
+		}
+
+		// The scroll offset is applied during the next layout/paint; centre once
+		// the live geometry reflects the revealed position.
+		PendingFocusNode = NodeName;
+		PendingFocusTicks = 3;
+		PendingFocusRetries = 10;
+		Invalidate(EInvalidateWidget::LayoutAndVolatility);
+		return true;
+	}
+
+	if (!HighlightNodes.IsValid())
+	{
+		return false;
+	}
+
+	// Difference/preview-texture canvas: stored geometry is already in image pixels.
+	for (const FUnrealGitWidgetNode& Node : *HighlightNodes)
+	{
+		if (Node.Name != NodeName)
+		{
+			continue;
+		}
+
+		bool bLeft = bUseLeftGeometry;
+		if (bUseBothGeometries)
+		{
+			bLeft = Node.Change != EUnrealGitWidgetChange::Added;
+		}
+		const bool bHasGeometry = bLeft ? Node.bHasLeftGeometry : Node.bHasRightGeometry;
+		if (!bHasGeometry)
+		{
+			return false;
+		}
+
+		const FVector2D NodePosition = bLeft ? Node.LeftPosition : Node.RightPosition;
+		const FVector2D NodeSize = bLeft ? Node.LeftSize : Node.RightSize;
+		CenterOn(GetImageSize(), NodePosition + NodeSize * 0.5f);
+		return true;
+	}
+
+	return false;
+}
+
+void SUnrealGitWidgetDiffCanvas::TickPendingFocus()
+{
+	if (PendingFocusNode.IsEmpty())
+	{
+		return;
+	}
+
+	if (PendingFocusTicks > 0)
+	{
+		--PendingFocusTicks;
+		return;
+	}
+
+	const FBox2D* LiveRect = LiveRectCache.Find(PendingFocusNode);
+	if (!LiveRect)
+	{
+		if (--PendingFocusRetries <= 0)
+		{
+			PendingFocusNode.Reset();
+		}
+		return;
+	}
+
+	CenterOn(GetImageSize(), LiveRect->GetCenter());
+	PendingFocusNode.Reset();
+}
+
+void SUnrealGitWidgetDiffCanvas::CenterOn(const FVector2D& ImageSize, const FVector2D& Center)
+{
+	const float Zoom = ComputeEffectiveZoom();
+	if (!IsFinitePoint(Center) || !FMath::IsFinite(Zoom) || Zoom <= 0.0f)
+	{
+		return;
+	}
+
+	FUnrealGitWidgetDiffCanvasState& State = GetState();
+	State.Pan = (ImageSize * 0.5f - Center) * Zoom;
+	Invalidate(EInvalidateWidget::LayoutAndVolatility);
 }
 
 float SUnrealGitWidgetDiffCanvas::GetZoom() const
