@@ -247,6 +247,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 								.BaseBrush(this, &SUnrealGitWidgetDiffView::GetLeftBrush)
 								.OverlayBrush(this, &SUnrealGitWidgetDiffView::GetHighlightBrush)
 								.ShowOverlay_Lambda([this]() { return bShowPixelOverlay; })
+								.FitToWindow_Lambda([this]() { return bFitToWindow; })
 								.TransformState(CanvasState)
 								.HighlightNodes(&CanvasNodes)
 								.SelectedNode_Lambda([this]() { return SelectedNodeName; }) ]
@@ -268,6 +269,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 								.BaseBrush(this, &SUnrealGitWidgetDiffView::GetRightBrush)
 								.OverlayBrush(this, &SUnrealGitWidgetDiffView::GetHighlightBrush)
 								.ShowOverlay_Lambda([this]() { return bShowPixelOverlay; })
+								.FitToWindow_Lambda([this]() { return bFitToWindow; })
 								.TransformState(CanvasState)
 								.HighlightNodes(&CanvasNodes)
 								.SelectedNode_Lambda([this]() { return SelectedNodeName; }) ]
@@ -278,6 +280,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 					[ SAssignNew(DiffCanvas, SUnrealGitWidgetDiffCanvas)
 						.BaseBrush(this, &SUnrealGitWidgetDiffView::GetDiffBrush)
 						.ShowOverlay(false)
+						.FitToWindow_Lambda([this]() { return bFitToWindow; })
 						.TransformState(CanvasState) ]
 
 					+ SWidgetSwitcher::Slot()
@@ -297,9 +300,25 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 						SNew(SVerticalBox)
 						+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)
 						[ SAssignNew(DiffSummaryText, STextBlock).Text(LOCTEXT("DiffSummary", "Diff Summary")) ]
+						+ SVerticalBox::Slot().AutoHeight().Padding(2.0f)
+						[
+							SNew(SHorizontalBox)
+							+ SHorizontalBox::Slot().AutoWidth().Padding(2.0f)
+							[ SNew(SCheckBox).IsChecked_Lambda([this]() { return bShowAdded ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+								.OnCheckStateChanged_Lambda([this](ECheckBoxState S) { bShowAdded = (S == ECheckBoxState::Checked); RebuildDiffEntries(); })
+								[ SNew(STextBlock).Text(LOCTEXT("FilterAdded", "Added")) ] ]
+							+ SHorizontalBox::Slot().AutoWidth().Padding(2.0f)
+							[ SNew(SCheckBox).IsChecked_Lambda([this]() { return bShowRemoved ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+								.OnCheckStateChanged_Lambda([this](ECheckBoxState S) { bShowRemoved = (S == ECheckBoxState::Checked); RebuildDiffEntries(); })
+								[ SNew(STextBlock).Text(LOCTEXT("FilterRemoved", "Removed")) ] ]
+							+ SHorizontalBox::Slot().AutoWidth().Padding(2.0f)
+							[ SNew(SCheckBox).IsChecked_Lambda([this]() { return bShowModified ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
+								.OnCheckStateChanged_Lambda([this](ECheckBoxState S) { bShowModified = (S == ECheckBoxState::Checked); RebuildDiffEntries(); })
+								[ SNew(STextBlock).Text(LOCTEXT("FilterModified", "Modified")) ] ]
+						]
 						+ SVerticalBox::Slot().FillHeight(1.0f)
 						[
-							SAssignNew(PropertyList, SListView<TSharedPtr<FString>>)
+							SAssignNew(PropertyList, SListView<TSharedPtr<FDiffEntry>>)
 							.ListItemsSource(&PropertyItems)
 							.OnGenerateRow(this, &SUnrealGitWidgetDiffView::OnGeneratePropertyRow)
 							.OnSelectionChanged(this, &SUnrealGitWidgetDiffView::OnPropertySelectionChanged)
@@ -383,13 +402,7 @@ void SUnrealGitWidgetDiffView::UpdateBrush(FSlateBrush& Brush, UTexture2D* Textu
 		return;
 	}
 
-	FVector2D Size((float)Texture->GetSizeX(), (float)Texture->GetSizeY());
-	if (bFitToWindow)
-	{
-		const float Fit = FMath::Min(1.0f, FMath::Min(1200.0f / FMath::Max(1.0f, Size.X), 800.0f / FMath::Max(1.0f, Size.Y)));
-		Size *= Fit;
-	}
-	Brush.ImageSize = Size;
+	Brush.ImageSize = FVector2D((float)Texture->GetSizeX(), (float)Texture->GetSizeY());
 }
 
 void SUnrealGitWidgetDiffView::RebuildHierarchy()
@@ -423,32 +436,7 @@ void SUnrealGitWidgetDiffView::RebuildHierarchy()
 			FText::AsNumber(ModifiedCount)));
 	}
 
-	// Populate the summary with every structural change by default.
-	PropertyItems.Reset();
-	PropertyNodeNames.Reset();
-	for (const FUnrealGitWidgetNode& Node : CanvasNodes)
-	{
-		if (Node.Change == EUnrealGitWidgetChange::Unchanged)
-		{
-			continue;
-		}
-
-		FString Prefix = TEXT("~");
-		if (Node.Change == EUnrealGitWidgetChange::Added) Prefix = TEXT("+");
-		else if (Node.Change == EUnrealGitWidgetChange::Removed) Prefix = TEXT("-");
-
-		FString Label = FString::Printf(TEXT("%s %s (%s)"), *Prefix, *Node.Name, *Node.TypeName);
-		if (Node.ChangedProperties.Num() > 0)
-		{
-			Label += TEXT("  [") + FString::Join(Node.ChangedProperties, TEXT(", ")) + TEXT("]");
-		}
-		PropertyItems.Add(MakeShared<FString>(Label));
-		PropertyNodeNames.Add(Node.Name);
-	}
-	if (PropertyList.IsValid())
-	{
-		PropertyList->RequestListRefresh();
-	}
+	RebuildDiffEntries();
 
 	HierarchyItems.Reset();
 	HierarchyRoots.Reset();
@@ -472,6 +460,10 @@ void SUnrealGitWidgetDiffView::RebuildHierarchy()
 	if (HierarchyList.IsValid())
 	{
 		HierarchyList->RequestTreeRefresh();
+		for (const TSharedPtr<FUnrealGitWidgetNode>& Item : HierarchyItems)
+		{
+			HierarchyList->SetItemExpansion(Item, true);
+		}
 	}
 	if (PropertyList.IsValid())
 	{
@@ -522,21 +514,39 @@ TSharedRef<ITableRow> SUnrealGitWidgetDiffView::OnGenerateHierarchyRow(TSharedPt
 	];
 }
 
-void SUnrealGitWidgetDiffView::OnHierarchySelectionChanged(TSharedPtr<FUnrealGitWidgetNode> Item, ESelectInfo::Type /*SelectInfo*/)
+void SUnrealGitWidgetDiffView::RebuildDiffEntries()
 {
-	SelectedNodeName = Item.IsValid() ? Item->Name : FString();
-	if (LeftCanvas.IsValid()) LeftCanvas->Invalidate(EInvalidateWidget::Paint);
-	if (RightCanvas.IsValid()) RightCanvas->Invalidate(EInvalidateWidget::Paint);
+	AllDiffEntries.Reset();
+	if (Session.IsValid() && Session->State == EUnrealGitWidgetDiffState::Ready)
+	{
+		for (const FUnrealGitWidgetNode& Node : Session->Result.Hierarchy)
+		{
+			if (Node.Change == EUnrealGitWidgetChange::Unchanged)
+			{
+				continue;
+			}
+			TSharedPtr<FDiffEntry> Entry = MakeShared<FDiffEntry>();
+			Entry->Name = Node.Name;
+			Entry->TypeName = Node.TypeName;
+			Entry->Path = Node.Path;
+			Entry->Change = Node.Change;
+			Entry->Properties = Node.ChangedProperties;
+			if (Node.bIsChildOfChange)
+			{
+				Entry->Properties.AddUnique(FString::Printf(TEXT("Child of added container: %s"), *Node.ChangedAncestor));
+			}
+			AllDiffEntries.Add(Entry);
+		}
+	}
 
 	PropertyItems.Reset();
-	PropertyNodeNames.Reset();
-	if (Item.IsValid())
+	for (const TSharedPtr<FDiffEntry>& Entry : AllDiffEntries)
 	{
-		for (const FString& Property : Item->ChangedProperties)
-		{
-			PropertyItems.Add(MakeShared<FString>(Property));
-			PropertyNodeNames.Add(Item->Name);
-		}
+		if (!Entry.IsValid()) continue;
+		if (Entry->Change == EUnrealGitWidgetChange::Added && !bShowAdded) continue;
+		if (Entry->Change == EUnrealGitWidgetChange::Removed && !bShowRemoved) continue;
+		if (Entry->Change == EUnrealGitWidgetChange::Modified && !bShowModified) continue;
+		PropertyItems.Add(Entry);
 	}
 	if (PropertyList.IsValid())
 	{
@@ -544,23 +554,36 @@ void SUnrealGitWidgetDiffView::OnHierarchySelectionChanged(TSharedPtr<FUnrealGit
 	}
 }
 
-void SUnrealGitWidgetDiffView::OnPropertySelectionChanged(TSharedPtr<FString> Item, ESelectInfo::Type /*SelectInfo*/)
+void SUnrealGitWidgetDiffView::OnHierarchySelectionChanged(TSharedPtr<FUnrealGitWidgetNode> Item, ESelectInfo::Type /*SelectInfo*/)
+{
+	SelectedNodeName = Item.IsValid() ? Item->Name : FString();
+	if (LeftCanvas.IsValid()) LeftCanvas->Invalidate(EInvalidateWidget::Paint);
+	if (RightCanvas.IsValid()) RightCanvas->Invalidate(EInvalidateWidget::Paint);
+
+	if (Item.IsValid() && PropertyList.IsValid())
+	{
+		for (const TSharedPtr<FDiffEntry>& Entry : PropertyItems)
+		{
+			if (Entry.IsValid() && Entry->Name == Item->Name)
+			{
+				PropertyList->SetSelection(Entry);
+				PropertyList->RequestScrollIntoView(Entry);
+				break;
+			}
+		}
+	}
+}
+
+void SUnrealGitWidgetDiffView::OnPropertySelectionChanged(TSharedPtr<FDiffEntry> Item, ESelectInfo::Type /*SelectInfo*/)
 {
 	if (!Item.IsValid() || !HierarchyList.IsValid())
 	{
 		return;
 	}
 
-	const int32 Index = PropertyItems.IndexOfByKey(Item);
-	if (!PropertyNodeNames.IsValidIndex(Index))
-	{
-		return;
-	}
-
-	const FString& NodeName = PropertyNodeNames[Index];
 	for (const TSharedPtr<FUnrealGitWidgetNode>& Node : HierarchyItems)
 	{
-		if (Node.IsValid() && Node->Name == NodeName)
+		if (Node.IsValid() && Node->Name == Item->Name)
 		{
 			HierarchyList->SetSelection(Node);
 			HierarchyList->RequestScrollIntoView(Node);
@@ -569,13 +592,51 @@ void SUnrealGitWidgetDiffView::OnPropertySelectionChanged(TSharedPtr<FString> It
 	}
 }
 
-TSharedRef<ITableRow> SUnrealGitWidgetDiffView::OnGeneratePropertyRow(TSharedPtr<FString> Item, const TSharedRef<STableViewBase>& OwnerTable)
+TSharedRef<ITableRow> SUnrealGitWidgetDiffView::OnGeneratePropertyRow(TSharedPtr<FDiffEntry> Item, const TSharedRef<STableViewBase>& OwnerTable)
 {
-	return SNew(STableRow<TSharedPtr<FString>>, OwnerTable)
+	FLinearColor Color(0.6f, 0.6f, 0.6f, 1.0f);
+	FString Glyph = TEXT("~");
+	if (Item.IsValid())
+	{
+		switch (Item->Change)
+		{
+		case EUnrealGitWidgetChange::Added: Color = FLinearColor(0.2f, 0.8f, 0.2f, 1.0f); Glyph = TEXT("+"); break;
+		case EUnrealGitWidgetChange::Removed: Color = FLinearColor(0.9f, 0.2f, 0.2f, 1.0f); Glyph = TEXT("-"); break;
+		case EUnrealGitWidgetChange::Modified: Color = FLinearColor(0.95f, 0.75f, 0.1f, 1.0f); Glyph = TEXT("~"); break;
+		default: break;
+		}
+	}
+
+	return SNew(STableRow<TSharedPtr<FDiffEntry>>, OwnerTable)
 	[
-		SNew(STextBlock)
-		.Text(FText::FromString(Item.IsValid() ? *Item : FString()))
-		.ColorAndOpacity(FSlateColor(FLinearColor(0.85f, 0.85f, 0.85f, 1.0f)))
+		SNew(SHorizontalBox)
+		+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Top).Padding(2.0f)
+		[
+			SNew(SBorder)
+			.BorderBackgroundColor(Color)
+			.Padding(4.0f)
+			[ SNew(STextBlock).Text(FText::FromString(Glyph)) ]
+		]
+		+ SHorizontalBox::Slot().FillWidth(1.0f).Padding(4.0f, 2.0f)
+		[
+			SNew(SVerticalBox)
+			+ SVerticalBox::Slot().AutoHeight()
+			[ SNew(STextBlock).Text(FText::FromString(Item.IsValid() ? Item->Name : FString())) ]
+			+ SVerticalBox::Slot().AutoHeight()
+			[ SNew(STextBlock)
+				.Text(FText::FromString(Item.IsValid() ? Item->TypeName : FString()))
+				.ColorAndOpacity(FSlateColor(FLinearColor(0.5f, 0.5f, 0.5f, 1.0f))) ]
+			+ SVerticalBox::Slot().AutoHeight()
+			[ SNew(STextBlock)
+				.Text(FText::FromString(Item.IsValid() ? Item->Path : FString()))
+				.ColorAndOpacity(FSlateColor(FLinearColor(0.45f, 0.45f, 0.45f, 1.0f)))
+				.AutoWrapText(true) ]
+			+ SVerticalBox::Slot().AutoHeight()
+			[ SNew(STextBlock)
+				.Text(FText::FromString(Item.IsValid() && Item->Properties.Num() > 0 ? FString::Join(Item->Properties, TEXT(", ")) : FString()))
+				.ColorAndOpacity(FSlateColor(FLinearColor(0.65f, 0.65f, 0.65f, 1.0f)))
+				.AutoWrapText(true) ]
+		]
 	];
 }
 

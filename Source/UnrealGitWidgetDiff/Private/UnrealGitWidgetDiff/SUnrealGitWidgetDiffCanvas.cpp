@@ -5,13 +5,47 @@
 #include "Rendering/DrawElements.h"
 #include "Styling/CoreStyle.h"
 
+namespace
+{
+	void AddDashedEdge(TArray<FVector2D>& OutPoints, const FVector2D& Start, const FVector2D& End, const float Dash, const float Gap)
+	{
+		const FVector2D Delta = End - Start;
+		const float Length = Delta.Size();
+		if (Length <= KINDA_SMALL_NUMBER)
+		{
+			return;
+		}
+		const FVector2D Dir = Delta / Length;
+		float Cursor = 0.0f;
+		while (Cursor < Length)
+		{
+			const float SegmentEnd = FMath::Min(Cursor + Dash, Length);
+			OutPoints.Add(Start + Dir * Cursor);
+			OutPoints.Add(Start + Dir * SegmentEnd);
+			Cursor = SegmentEnd + Gap;
+		}
+	}
+
+	void AddDashedRect(TArray<FVector2D>& OutPoints, const FVector2D& Min, const FVector2D& Max)
+	{
+		const float Dash = 5.0f;
+		const float Gap = 4.0f;
+		AddDashedEdge(OutPoints, Min, FVector2D(Max.X, Min.Y), Dash, Gap);
+		AddDashedEdge(OutPoints, FVector2D(Max.X, Min.Y), Max, Dash, Gap);
+		AddDashedEdge(OutPoints, Max, FVector2D(Min.X, Max.Y), Dash, Gap);
+		AddDashedEdge(OutPoints, FVector2D(Min.X, Max.Y), Min, Dash, Gap);
+	}
+}
+
 void SUnrealGitWidgetDiffCanvas::Construct(const FArguments& InArgs)
 {
 	BaseBrush = InArgs._BaseBrush;
 	OverlayBrush = InArgs._OverlayBrush;
 	bShowOverlay = InArgs._ShowOverlay;
+	bFitToWindow = InArgs._FitToWindow;
 	TransformState = InArgs._TransformState;
 	HighlightNodes = InArgs._HighlightNodes;
+	bUseLeftGeometry = InArgs._UseLeftGeometry;
 	SelectedNode = InArgs._SelectedNode;
 
 	// Keep each canvas' pan/zoom contained to its own pane.
@@ -58,8 +92,12 @@ int32 SUnrealGitWidgetDiffCanvas::OnPaint(
 	const FUnrealGitWidgetDiffCanvasState& State = GetState();
 	const FSlateBrush* Base = BaseBrush.Get();
 	const FVector2D ImageSize = GetImageSize();
-	const FVector2D DrawSize = ImageSize * State.Zoom;
 	const FVector2D AllottedSize = AllottedGeometry.GetLocalSize();
+	const float FitScale = bFitToWindow.Get(false)
+		? FMath::Min(AllottedSize.X / FMath::Max(1.0f, ImageSize.X), AllottedSize.Y / FMath::Max(1.0f, ImageSize.Y))
+		: 1.0f;
+	const float EffectiveZoom = FitScale * State.Zoom;
+	const FVector2D DrawSize = ImageSize * EffectiveZoom;
 	const FVector2D Position = (AllottedSize - DrawSize) * 0.5f + State.Pan;
 
 	// Designer-style dark viewport background with a subtle grid.
@@ -122,12 +160,44 @@ int32 SUnrealGitWidgetDiffCanvas::OnPaint(
 
 	if (HighlightNodes)
 	{
+		auto GetGeometry = [this](const FUnrealGitWidgetNode& Node, FVector2D& OutPos, FVector2D& OutSize) -> bool
+		{
+			if (bUseLeftGeometry)
+			{
+				if (!Node.bHasLeftGeometry) return false;
+				OutPos = Node.LeftPosition;
+				OutSize = Node.LeftSize;
+				return true;
+			}
+			if (!Node.bHasRightGeometry) return false;
+			OutPos = Node.RightPosition;
+			OutSize = Node.RightSize;
+			return true;
+		};
+
+		// Faint designer-style layout bounds for every widget.
 		for (const FUnrealGitWidgetNode& Node : *HighlightNodes)
 		{
-			if (!Node.bHasGeometry || Node.Change == EUnrealGitWidgetChange::Unchanged)
-			{
-				continue;
-			}
+			FVector2D NodePos, NodeSize;
+			if (!GetGeometry(Node, NodePos, NodeSize)) continue;
+
+			const FVector2D Min = Position + NodePos * EffectiveZoom;
+			const FVector2D Max = Min + NodeSize * EffectiveZoom;
+			TArray<FVector2D> Points;
+			AddDashedRect(Points, Min, Max);
+			FSlateDrawElement::MakeLines(
+				OutDrawElements, LayerId + 4, AllottedGeometry.ToPaintGeometry(), Points,
+				ESlateDrawEffect::None, FLinearColor(1.0f, 1.0f, 1.0f, 0.07f), true, 1.0f);
+		}
+
+		// Change outlines: green added, red removed, yellow modified.
+		for (const FUnrealGitWidgetNode& Node : *HighlightNodes)
+		{
+			FVector2D NodePos, NodeSize;
+			if (!GetGeometry(Node, NodePos, NodeSize)) continue;
+			if (Node.Change == EUnrealGitWidgetChange::Unchanged) continue;
+			if (bUseLeftGeometry && Node.Change == EUnrealGitWidgetChange::Added) continue;
+			if (!bUseLeftGeometry && Node.Change == EUnrealGitWidgetChange::Removed) continue;
 
 			FLinearColor Color(1.0f, 1.0f, 1.0f, 1.0f);
 			switch (Node.Change)
@@ -138,63 +208,55 @@ int32 SUnrealGitWidgetDiffCanvas::OnPaint(
 			default: break;
 			}
 
-			const FVector2D Min = Position + Node.Position * State.Zoom;
-			const FVector2D Size = Node.Size * State.Zoom;
-			const FVector2D Max = Min + Size;
-
+			const FVector2D Min = Position + NodePos * EffectiveZoom;
+			const FVector2D Max = Min + NodeSize * EffectiveZoom;
 			TArray<FVector2D> Points;
-			Points.Add(Min);
-			Points.Add(FVector2D(Max.X, Min.Y));
-			Points.Add(Max);
-			Points.Add(FVector2D(Min.X, Max.Y));
-			Points.Add(Min);
-
+			AddDashedRect(Points, Min, Max);
 			FSlateDrawElement::MakeLines(
-				OutDrawElements,
-				LayerId + 4,
-				AllottedGeometry.ToPaintGeometry(),
-				Points,
-				ESlateDrawEffect::None,
-				Color.CopyWithNewOpacity(0.85f),
-				true,
-				1.5f);
+				OutDrawElements, LayerId + 5, AllottedGeometry.ToPaintGeometry(), Points,
+				ESlateDrawEffect::None, Color.CopyWithNewOpacity(0.9f), true, 2.0f);
 		}
 
-		// Selection outline (navigated from the Diff Summary or hierarchy).
+		// Selection outline + non-interactive corner handles.
 		const FString Selected = SelectedNode.Get();
 		if (!Selected.IsEmpty())
 		{
 			for (const FUnrealGitWidgetNode& Node : *HighlightNodes)
 			{
-				if (!Node.bHasGeometry || Node.Name != Selected)
-				{
-					continue;
-				}
+				if (Node.Name != Selected) continue;
+				FVector2D NodePos, NodeSize;
+				if (!GetGeometry(Node, NodePos, NodeSize)) continue;
 
-				const FVector2D Min = Position + Node.Position * State.Zoom;
-				const FVector2D Max = Min + Node.Size * State.Zoom;
+				const FVector2D Min = Position + NodePos * EffectiveZoom;
+				const FVector2D Max = Min + NodeSize * EffectiveZoom;
 				TArray<FVector2D> Points;
 				Points.Add(Min);
 				Points.Add(FVector2D(Max.X, Min.Y));
 				Points.Add(Max);
 				Points.Add(FVector2D(Min.X, Max.Y));
 				Points.Add(Min);
-
 				FSlateDrawElement::MakeLines(
-					OutDrawElements,
-					LayerId + 5,
-					AllottedGeometry.ToPaintGeometry(),
-					Points,
-					ESlateDrawEffect::None,
-					FLinearColor(0.25f, 0.8f, 1.0f, 1.0f),
-					true,
-					2.5f);
+					OutDrawElements, LayerId + 6, AllottedGeometry.ToPaintGeometry(), Points,
+					ESlateDrawEffect::None, FLinearColor(0.25f, 0.8f, 1.0f, 1.0f), true, 2.0f);
+
+				if (WhiteBrush)
+				{
+					const float HandleSize = 6.0f;
+					const FVector2D Corners[4] = { Min, FVector2D(Max.X, Min.Y), Max, FVector2D(Min.X, Max.Y) };
+					for (const FVector2D& Corner : Corners)
+					{
+						FSlateDrawElement::MakeBox(
+							OutDrawElements, LayerId + 7,
+							AllottedGeometry.ToPaintGeometry(FVector2D(HandleSize, HandleSize), FSlateLayoutTransform(Corner - FVector2D(HandleSize * 0.5f))),
+							WhiteBrush, ESlateDrawEffect::None, FLinearColor(0.25f, 0.8f, 1.0f, 1.0f));
+					}
+				}
 				break;
 			}
 		}
 	}
 
-	return LayerId + 6;
+	return LayerId + 8;
 }
 
 FReply SUnrealGitWidgetDiffCanvas::OnMouseWheel(const FGeometry& MyGeometry, const FPointerEvent& MouseEvent)

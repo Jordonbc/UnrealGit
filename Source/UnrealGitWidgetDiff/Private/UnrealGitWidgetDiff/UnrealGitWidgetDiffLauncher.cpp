@@ -253,16 +253,17 @@ void FUnrealGitWidgetDiffLauncher::Launch(const FString& AssetFileName, const FS
 
 			for (FUnrealGitWidgetNode& Node : Hierarchy)
 			{
-				const FBox2D* Rect = LeftRects.Find(Node.Name);
-				if (!Rect)
+				if (const FBox2D* LeftRect = LeftRects.Find(Node.Name))
 				{
-					Rect = RightRects.Find(Node.Name);
+					Node.LeftPosition = LeftRect->Min;
+					Node.LeftSize = LeftRect->GetSize();
+					Node.bHasLeftGeometry = true;
 				}
-				if (Rect)
+				if (const FBox2D* RightRect = RightRects.Find(Node.Name))
 				{
-					Node.Position = Rect->Min;
-					Node.Size = Rect->GetSize();
-					Node.bHasGeometry = true;
+					Node.RightPosition = RightRect->Min;
+					Node.RightSize = RightRect->GetSize();
+					Node.bHasRightGeometry = true;
 				}
 			}
 

@@ -25,8 +25,10 @@ public:
 		SLATE_ATTRIBUTE(const FSlateBrush*, BaseBrush)
 		SLATE_ATTRIBUTE(const FSlateBrush*, OverlayBrush)
 		SLATE_ATTRIBUTE(bool, ShowOverlay)
+		SLATE_ATTRIBUTE(bool, FitToWindow)
 		SLATE_ARGUMENT(TSharedPtr<FUnrealGitWidgetDiffCanvasState>, TransformState)
 		SLATE_ARGUMENT(TArray<FUnrealGitWidgetNode>*, HighlightNodes)
+		SLATE_ARGUMENT(bool, UseLeftGeometry)
 		SLATE_ATTRIBUTE(FString, SelectedNode)
 	SLATE_END_ARGS()
 
@@ -50,10 +52,12 @@ private:
 	TAttribute<const FSlateBrush*> BaseBrush;
 	TAttribute<const FSlateBrush*> OverlayBrush;
 	TAttribute<bool> bShowOverlay;
+	TAttribute<bool> bFitToWindow;
 
 	TSharedPtr<FUnrealGitWidgetDiffCanvasState> TransformState;
 	mutable TSharedPtr<FUnrealGitWidgetDiffCanvasState> LocalState;
 	TArray<FUnrealGitWidgetNode>* HighlightNodes = nullptr;
+	bool bUseLeftGeometry = true;
 	TAttribute<FString> SelectedNode;
 
 	bool bPanning = false;

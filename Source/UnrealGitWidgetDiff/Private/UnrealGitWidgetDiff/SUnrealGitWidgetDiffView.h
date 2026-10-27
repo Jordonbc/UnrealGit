@@ -83,14 +83,29 @@ private:
 	TArray<TSharedPtr<FUnrealGitWidgetNode>> HierarchyRoots;
 
 	void OnGetHierarchyChildren(TSharedPtr<FUnrealGitWidgetNode> Item, TArray<TSharedPtr<FUnrealGitWidgetNode>>& OutChildren) const;
-	TSharedPtr<SListView<TSharedPtr<FString>>> PropertyList;
-	TArray<TSharedPtr<FString>> PropertyItems;
-	TArray<FString> PropertyNodeNames;
+	struct FDiffEntry
+	{
+		FString Name;
+		FString TypeName;
+		FString Path;
+		EUnrealGitWidgetChange Change = EUnrealGitWidgetChange::Unchanged;
+		TArray<FString> Properties;
+	};
+
+	TSharedPtr<SListView<TSharedPtr<FDiffEntry>>> PropertyList;
+	TArray<TSharedPtr<FDiffEntry>> PropertyItems;
+	TArray<TSharedPtr<FDiffEntry>> AllDiffEntries;
 	TSharedPtr<STextBlock> DiffSummaryText;
-	void OnPropertySelectionChanged(TSharedPtr<FString> Item, ESelectInfo::Type SelectInfo);
+
+	bool bShowAdded = true;
+	bool bShowRemoved = true;
+	bool bShowModified = true;
+
+	void RebuildDiffEntries();
+	void OnPropertySelectionChanged(TSharedPtr<FDiffEntry> Item, ESelectInfo::Type SelectInfo);
 
 	void RebuildHierarchy();
 	TSharedRef<ITableRow> OnGenerateHierarchyRow(TSharedPtr<FUnrealGitWidgetNode> Item, const TSharedRef<STableViewBase>& OwnerTable);
 	void OnHierarchySelectionChanged(TSharedPtr<FUnrealGitWidgetNode> Item, ESelectInfo::Type SelectInfo);
-	TSharedRef<ITableRow> OnGeneratePropertyRow(TSharedPtr<FString> Item, const TSharedRef<STableViewBase>& OwnerTable);
+	TSharedRef<ITableRow> OnGeneratePropertyRow(TSharedPtr<FDiffEntry> Item, const TSharedRef<STableViewBase>& OwnerTable);
 };

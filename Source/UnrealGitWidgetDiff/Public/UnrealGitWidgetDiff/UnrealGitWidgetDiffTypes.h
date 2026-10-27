@@ -38,8 +38,11 @@ struct FUnrealGitWidgetNode
 {
 	FString Name;
 	FString ParentName;
+	FString Path;
 	FString TypeName;
 	int32 Depth = 0;
+	bool bIsChildOfChange = false;
+	FString ChangedAncestor;
 	int32 ParentIndex = INDEX_NONE;
 	EUnrealGitWidgetChange Change = EUnrealGitWidgetChange::Unchanged;
 	TArray<FString> ChangedProperties;
@@ -48,10 +51,14 @@ struct FUnrealGitWidgetNode
 	/** Index into the flattened pre-order array of the right tree, or INDEX_NONE if removed. */
 	int32 RightIndex = INDEX_NONE;
 
-	/** Widget rectangle in the rendered canvas (left/old revision). */
-	FVector2D Position = FVector2D::ZeroVector;
-	FVector2D Size = FVector2D::ZeroVector;
-	bool bHasGeometry = false;
+	/** Widget rectangles in each rendered canvas. */
+	FVector2D LeftPosition = FVector2D::ZeroVector;
+	FVector2D LeftSize = FVector2D::ZeroVector;
+	bool bHasLeftGeometry = false;
+
+	FVector2D RightPosition = FVector2D::ZeroVector;
+	FVector2D RightSize = FVector2D::ZeroVector;
+	bool bHasRightGeometry = false;
 };
 
 /**
