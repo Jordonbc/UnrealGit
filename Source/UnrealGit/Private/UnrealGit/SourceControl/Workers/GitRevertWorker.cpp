@@ -108,7 +108,7 @@ void FGitRevertWorker::Execute(
 		if (UnrealGit::Workers::TryMakeRepoRelativePaths(RepoRoot, Files, RelativePaths, ConvertError))
 		{
 			FString UnlockError;
-			UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, { TEXT("lfs"), TEXT("unlock") }, RelativePaths, UnlockError);
+			UnrealGit::Workers::UnlockLfsLocks(ProcessRunner, RepoRoot, RelativePaths, false, UnlockError);
 		}
 	}
 

@@ -641,7 +641,25 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	const FString ExistingRepoRoot = RepoRoot;
 	const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe> Runner = ProcessRunner.ToSharedRef();
 
-	if (InConcurrency == EConcurrency::Synchronous)
+	// CheckOut is network-bound (one `git lfs lock` per file). Never block the game thread for it:
+	// return immediately with optimistic state and let the worker finish in the background.
+	const bool bAsyncCheckOut = (InConcurrency == EConcurrency::Synchronous) && OpName == "CheckOut" && InFiles.Num() > 0;
+	if (bAsyncCheckOut)
+	{
+		for (const FString& File : InFiles)
+		{
+			const FString Abs = FPaths::ConvertRelativePathToFull(File);
+			const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
+			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetCheckedOut(true);
+
+			// Clear read-only now so an immediate save cannot race the background worker.
+			ApplyLocalReadOnlyState(Abs, false);
+		}
+
+		SourceControlStateChanged.Broadcast();
+	}
+
+	if (InConcurrency == EConcurrency::Synchronous && !bAsyncCheckOut)
 	{
 		TFuture<FUnrealGitWorkerOutput> Future = Async(EAsyncExecution::ThreadPool, [Runner, WorkingDirHint, ExistingRepoRoot, Command]()
 		{
@@ -1152,6 +1170,18 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 	{
 		LastErrorText = Output.ErrorText;
 		UE_LOG(LogSourceControl, Error, TEXT("UnrealGit: Operation %s failed: %s"), *OperationName, *LastErrorText.ToString());
+
+		if (OperationName == TEXT("CheckOut"))
+		{
+			// Roll back the optimistic checkout state.
+			for (const FString& File : Files)
+			{
+				const FString Abs = FPaths::ConvertRelativePathToFull(File);
+				const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
+				StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetCheckedOut(false);
+			}
+			bAnyStateChanged = true;
+		}
 
 		if (OperationName == TEXT("Connect"))
 		{

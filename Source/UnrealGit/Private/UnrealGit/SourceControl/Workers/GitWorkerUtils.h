@@ -10,6 +10,7 @@
 #include "UnrealGit/Git/IGitProcessRunner.h"
 #include "UnrealGit/Git/Parsers/GitRevParseParser.h"
 #include "UnrealGit/Git/Parsers/GitFileHistoryParser.h"
+#include "UnrealGit/Git/Parsers/GitLfsLocksParser.h"
 
 namespace UnrealGit::Workers
 {
@@ -254,6 +255,86 @@ namespace UnrealGit::Workers
 		});
 
 		return bSucceeded;
+	}
+
+	/**
+	 * Releases LFS locks for the given repo-relative paths by resolving lock IDs first.
+	 *
+	 * Path-based `git lfs unlock` re-resolves the lock itself and fails when that lookup
+	 * does not match; passing the ID is reliable. Paths without a lock are skipped.
+	 */
+	inline bool UnlockLfsLocks(
+		const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
+		const FString& RepoRoot,
+		const TArray<FString>& RelativePaths,
+		bool bForce,
+		FString& OutError)
+	{
+		OutError.Reset();
+		if (RelativePaths.Num() == 0)
+		{
+			return true;
+		}
+
+		FGitProcessRequest LocksRequest;
+		LocksRequest.WorkingDirectory = FString();
+		LocksRequest.RepoRoot = RepoRoot;
+		LocksRequest.Arguments = { TEXT("lfs"), TEXT("locks"), TEXT("--json") };
+
+		const FGitProcessResult LocksResult = ProcessRunner->Run(LocksRequest);
+		if (LocksResult.ExitCode != 0)
+		{
+			OutError = BytesToTextUtf8Lossy(LocksResult.StdErr).TrimStartAndEnd();
+			return false;
+		}
+
+		TArray<FGitLfsLock> Locks;
+		FString ParseError;
+		if (!FGitLfsLocksParser::ParseJson(BytesToTextUtf8Lossy(LocksResult.StdOut), Locks, ParseError))
+		{
+			OutError = ParseError;
+			return false;
+		}
+
+		TMap<FString, FString> LockIdByPath;
+		for (const FGitLfsLock& Lock : Locks)
+		{
+			FString LockPath = Lock.Path;
+			LockPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+			LockIdByPath.Add(MoveTemp(LockPath), Lock.Id);
+		}
+
+		for (const FString& RelativePath : RelativePaths)
+		{
+			FString NormalizedPath = RelativePath;
+			NormalizedPath.ReplaceInline(TEXT("\\"), TEXT("/"));
+
+			const FString* LockId = LockIdByPath.Find(NormalizedPath);
+			if (!LockId || LockId->IsEmpty())
+			{
+				continue;
+			}
+
+			FGitProcessRequest UnlockRequest;
+			UnlockRequest.WorkingDirectory = FString();
+			UnlockRequest.RepoRoot = RepoRoot;
+			UnlockRequest.Arguments = { TEXT("lfs"), TEXT("unlock") };
+			if (bForce)
+			{
+				UnlockRequest.Arguments.Add(TEXT("--force"));
+			}
+			UnlockRequest.Arguments.Add(TEXT("--id"));
+			UnlockRequest.Arguments.Add(*LockId);
+
+			const FGitProcessResult UnlockResult = ProcessRunner->Run(UnlockRequest);
+			if (UnlockResult.ExitCode != 0)
+			{
+				OutError = BytesToTextUtf8Lossy(UnlockResult.StdErr).TrimStartAndEnd();
+				return false;
+			}
+		}
+
+		return true;
 	}
 
 	inline bool TryFixCorruptedIndex(

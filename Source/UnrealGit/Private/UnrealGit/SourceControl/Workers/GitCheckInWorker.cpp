@@ -94,7 +94,7 @@ void FGitCheckInWorker::Execute(
 		if (Settings.bEnableLfsLocks)
 		{
 			FString UnlockError;
-			UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, { TEXT("lfs"), TEXT("unlock") }, RelativePaths, UnlockError);
+			UnrealGit::Workers::UnlockLfsLocks(ProcessRunner, RepoRoot, RelativePaths, false, UnlockError);
 		}
 
 		OutOutput.bSuccess = true;
@@ -205,7 +205,7 @@ void FGitCheckInWorker::Execute(
 	{
 		// Submitting releases the LFS lock acquired by checkout (best effort).
 		FString UnlockError;
-		UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, { TEXT("lfs"), TEXT("unlock") }, RelativePaths, UnlockError);
+		UnrealGit::Workers::UnlockLfsLocks(ProcessRunner, RepoRoot, RelativePaths, false, UnlockError);
 	}
 
 	OutOutput.bSuccess = true;
