@@ -87,7 +87,7 @@ namespace UnrealGit::Workers
 		{
 			CurrentDir = FPaths::ProjectDir();
 		}
-		UE_LOG(LogUnrealGit, Log, TEXT("EnsureRepoRoot: Searching from directory: '%s'"), *CurrentDir);
+		UE_LOG(LogUnrealGit, Verbose, TEXT("EnsureRepoRoot: Searching from directory: '%s'"), *CurrentDir);
 		CurrentDir = FPaths::ConvertRelativePathToFull(CurrentDir);
 		FPaths::NormalizeDirectoryName(CurrentDir);
 
@@ -99,7 +99,7 @@ namespace UnrealGit::Workers
 		const FString StdErr = BytesToTextUtf8Lossy(RootResult.StdErr).TrimStartAndEnd();
 		const FString StdOut = BytesToTextUtf8Lossy(RootResult.StdOut);
 
-		UE_LOG(LogUnrealGit, Log, TEXT("EnsureRepoRoot: git -C rev-parse result: exit=%d, stdout='%s', stderr='%s'"), 
+		UE_LOG(LogUnrealGit, Verbose, TEXT("EnsureRepoRoot: git -C rev-parse result: exit=%d, stdout='%s', stderr='%s'"),
 			RootResult.ExitCode, *StdOut.TrimStartAndEnd(), *StdErr);
 
 		if (RootResult.ExitCode == 0 && FGitRevParseParser::ParseShowToplevel(StdOut, InOutRepoRoot))
@@ -148,7 +148,6 @@ namespace UnrealGit::Workers
 			return false;
 		}
 
-		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("TryMakeRepoRelativePath: SUCCESS - '%s' -> '%s'"), *Abs, *Rel);
 		OutRelative = MoveTemp(Rel);
 		return true;
 	}

@@ -25,10 +25,6 @@ public:
 	UPROPERTY(EditAnywhere, Config, Category="Executables")
 	FFilePath GitExecutableOverride;
 
-	/** Automatically locks Git LFS files when checking out (making writable). */
-	UPROPERTY(EditAnywhere, Config, Category="Locks")
-	bool bAutoLockOnCheckout = false;
-
 	virtual FName GetCategoryName() const override;
 	virtual FName GetContainerName() const override;
 };

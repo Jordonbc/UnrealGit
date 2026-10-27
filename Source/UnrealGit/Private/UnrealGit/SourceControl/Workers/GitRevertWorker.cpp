@@ -11,7 +11,7 @@ FName FGitRevertWorker::GetName() const
 
 void FGitRevertWorker::Execute(
 	const TSharedRef<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
-	const FUnrealGitProviderSettings& /*Settings*/,
+	const FUnrealGitProviderSettings& Settings,
 	const FString& WorkingDirectoryHint,
 	bool /*bQueryLfsLocks*/,
 	const TSharedRef<ISourceControlOperation, ESPMode::ThreadSafe>& /*Operation*/,
@@ -75,6 +75,18 @@ void FGitRevertWorker::Execute(
 			OutOutput.bSuccess = false;
 			OutOutput.ErrorText = FText::FromString(RestoreError);
 			return;
+		}
+	}
+
+	if (Settings.bEnableLfsLocks && Files.Num() > 0)
+	{
+		// Reverting discards the changes, so release the LFS lock acquired by checkout.
+		TArray<FString> RelativePaths;
+		FString ConvertError;
+		if (UnrealGit::Workers::TryMakeRepoRelativePaths(RepoRoot, Files, RelativePaths, ConvertError))
+		{
+			FString UnlockError;
+			UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, { TEXT("lfs"), TEXT("unlock") }, RelativePaths, UnlockError);
 		}
 	}
 

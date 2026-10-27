@@ -144,6 +144,7 @@ private:
 	FSourceControlStateChanged SourceControlStateChanged;
 
 	FDateTime NextLfsLocksRefreshUtc = FDateTime(0);
+	FDateTime NextPeriodicRefreshUtc = FDateTime(0);
 	bool bHasCachedLfsLocks = false;
 	TArray<struct FGitLfsLock> CachedLfsLocks;
 };

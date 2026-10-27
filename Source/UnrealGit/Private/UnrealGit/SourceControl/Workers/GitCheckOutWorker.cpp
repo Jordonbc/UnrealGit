@@ -44,13 +44,22 @@ void FGitCheckOutWorker::Execute(
 		IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
 		PlatformFile.SetReadOnly(*AbsolutePath, false);
 
-		if (Settings.bEnableLfsLocks && Settings.bAutoLockOnCheckout)
+		if (Settings.bEnableLfsLocks)
 		{
+			// Checkout doubles as the LFS lock acquisition: holding the lock means the file
+			// is checked out to this user. Non-LFS files simply fail to lock and stay usable.
 			FGitProcessRequest LockRequest;
 			LockRequest.WorkingDirectory = FString();
 			LockRequest.RepoRoot = RepoRoot;
 			LockRequest.Arguments = { TEXT("lfs"), TEXT("lock"), TEXT("--"), Relative };
-			ProcessRunner->Run(LockRequest);
+
+			const FGitProcessResult LockResult = ProcessRunner->Run(LockRequest);
+			if (LockResult.ExitCode != 0)
+			{
+				UE_LOG(LogUnrealGit, Verbose, TEXT("CheckOut: could not lock '%s' (probably not LFS-tracked): %s"),
+					*Relative,
+					*UnrealGit::Workers::BytesToTextUtf8Lossy(LockResult.StdErr).TrimStartAndEnd());
+			}
 		}
 	}
 

@@ -7,23 +7,33 @@
 #include "Serialization/JsonSerializer.h"
 #include "UnrealGit/Private/UnrealGit/Git/Parsers/GitParsingUtils.h"
 
-bool FGitLfsLocksParser::ParseJson(const FString& StdOutText, TArray<FGitLfsLock>& OutLocks, FString& OutError)
+	bool FGitLfsLocksParser::ParseJson(const FString& StdOutText, TArray<FGitLfsLock>& OutLocks, FString& OutError)
 {
 	OutLocks.Reset();
 	OutError.Reset();
 
-	TSharedPtr<FJsonObject> Root;
+	TSharedPtr<FJsonValue> RootValue;
 	const TSharedRef<TJsonReader<>> Reader = TJsonReaderFactory<>::Create(StdOutText);
-	if (!FJsonSerializer::Deserialize(Reader, Root) || !Root.IsValid())
+	if (!FJsonSerializer::Deserialize(Reader, RootValue) || !RootValue.IsValid())
 	{
 		OutError = TEXT("Failed to parse git lfs locks JSON.");
 		return false;
 	}
 
+	// `git lfs locks --json` returns a bare array; some versions wrap it as {"locks":[...]}.
 	const TArray<TSharedPtr<FJsonValue>>* LocksArray = nullptr;
-	if (!Root->TryGetArrayField(TEXT("locks"), LocksArray) || LocksArray == nullptr)
+	if (RootValue->Type == EJson::Array)
 	{
-		// An empty result can omit the array or provide an empty one depending on git-lfs version.
+		LocksArray = &RootValue->AsArray();
+	}
+	else if (RootValue->Type == EJson::Object)
+	{
+		RootValue->AsObject()->TryGetArrayField(TEXT("locks"), LocksArray);
+	}
+
+	if (!LocksArray)
+	{
+		// An empty result can omit the array depending on git-lfs version.
 		return true;
 	}
 
@@ -36,14 +46,21 @@ bool FGitLfsLocksParser::ParseJson(const FString& StdOutText, TArray<FGitLfsLock
 		}
 
 		FGitLfsLock Lock;
-		Lock.Path = LockObj->GetStringField(TEXT("path"));
-		Lock.Id = LockObj->GetStringField(TEXT("id"));
-
-		const TSharedPtr<FJsonObject> OwnerObj = LockObj->GetObjectField(TEXT("owner"));
-		if (OwnerObj.IsValid())
+		FString Path;
+		FString Id;
+		if (!LockObj->TryGetStringField(TEXT("path"), Path))
 		{
-			Lock.OwnerName = OwnerObj->GetStringField(TEXT("name"));
-			Lock.OwnerEmail = OwnerObj->GetStringField(TEXT("email"));
+			continue;
+		}
+		Lock.Path = MoveTemp(Path);
+		LockObj->TryGetStringField(TEXT("id"), Id);
+		Lock.Id = MoveTemp(Id);
+
+		const TSharedPtr<FJsonObject>* OwnerObj = nullptr;
+		if (LockObj->TryGetObjectField(TEXT("owner"), OwnerObj) && OwnerObj && OwnerObj->IsValid())
+		{
+			(*OwnerObj)->TryGetStringField(TEXT("name"), Lock.OwnerName);
+			(*OwnerObj)->TryGetStringField(TEXT("email"), Lock.OwnerEmail);
 		}
 
 		FString LockedAt;

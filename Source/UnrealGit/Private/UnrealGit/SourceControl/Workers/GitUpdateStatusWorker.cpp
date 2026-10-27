@@ -97,10 +97,8 @@ void FGitUpdateStatusWorker::Execute(
 		}
 
 		const FGitProcessResult StatusResult = ProcessRunner->Run(StatusRequest);
-		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatus: git status result: exit=%d, stdout_len=%d, stdout='%s', stderr='%s'"),
-			StatusResult.ExitCode, StatusResult.StdOut.Num(),
-			*UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdOut).Left(500),
-			*UnrealGit::Workers::BytesToTextUtf8Lossy(StatusResult.StdErr));
+		UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatus: git status batch finished: exit=%d, bytes=%d"),
+			StatusResult.ExitCode, StatusResult.StdOut.Num());
 		if (StatusResult.ExitCode != 0)
 		{
 			bStatusOk = false;
@@ -372,8 +370,13 @@ void FGitUpdateStatusWorker::Execute(
 			const FString LocksText = UnrealGit::Workers::BytesToTextUtf8Lossy(LocksResult.StdOut);
 			if (FGitLfsLocksParser::ParseJson(LocksText, Locks, LocksError))
 			{
+				UE_LOG(LogUnrealGit, Log, TEXT("UpdateStatus: git lfs locks returned %d lock(s)"), Locks.Num());
 				OutOutput.bHasLfsLocks = true;
 				OutOutput.LfsLocks = MoveTemp(Locks);
+			}
+			else
+			{
+				UE_LOG(LogUnrealGit, Warning, TEXT("UpdateStatus: failed to parse git lfs locks: %s"), *LocksError);
 			}
 		}
 	}

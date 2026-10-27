@@ -160,6 +160,13 @@ void FGitCheckInWorker::Execute(
 		}
 	}
 
+	if (Settings.bEnableLfsLocks && RelativePaths.Num() > 0)
+	{
+		// Submitting releases the LFS lock acquired by checkout (best effort).
+		FString UnlockError;
+		UnrealGit::Workers::RunGitWithBatchedPaths(ProcessRunner, RepoRoot, { TEXT("lfs"), TEXT("unlock") }, RelativePaths, UnlockError);
+	}
+
 	OutOutput.bSuccess = true;
 	OutOutput.RepoRoot = RepoRoot;
 	OutOutput.bShouldUpdateStatus = true;

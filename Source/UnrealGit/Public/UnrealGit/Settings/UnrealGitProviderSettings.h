@@ -27,6 +27,8 @@ struct FUnrealGitProviderSettings final
 	bool bEnableLfsLocks = true;
 	int32 LfsLocksRefreshIntervalSeconds = 15;
 
-	bool bAutoLockOnCheckout = false;
+	/** Current git user identity, used to recognise locks owned by this user. */
+	FString UserName;
+	FString UserEmail;
 };
 

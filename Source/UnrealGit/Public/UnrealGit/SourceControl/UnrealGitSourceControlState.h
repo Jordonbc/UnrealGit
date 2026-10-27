@@ -23,6 +23,7 @@ public:
 
 	void UpdateFromStatus(const FGitFileStatus& InStatus);
 	void SetLockState(EGitLockState InLockState, FString InLockOwner);
+	void SetCheckedOut(bool bInCheckedOut);
 	void SetHistory(const TArray<TSharedRef<class ISourceControlRevision, ESPMode::ThreadSafe>>& InHistory);
 
 	// ISourceControlState
@@ -67,6 +68,14 @@ public:
 	virtual bool IsConflicted() const override;
 	virtual bool CanRevert() const override;
 
+	/**
+	 * Only report a status string when there is something worth showing.
+	 *
+	 * The base implementation reports a status for every file whose IsCheckedOut() is true,
+	 * which for Git means every tracked file. That would label clean files "Unchanged".
+	 */
+	virtual TOptional<FText> GetStatusText() const override;
+
 private:
 	FString AbsoluteFilename;
 	FDateTime TimeStamp;
@@ -76,6 +85,9 @@ private:
 	bool bIsUnstaged = false;
 	bool bIsTracked = false;
 	bool bIsConflicted = false;
+
+	/** True once this file has been checked out in this editor session (cleared on submit/revert). */
+	bool bIsCheckedOutByMe = false;
 	TOptional<FGitResolveInfo> ResolveInfo;
 
 	EGitLockState LockState = EGitLockState::Unknown;

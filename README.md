@@ -12,7 +12,7 @@ An Unreal Engine **Source Control provider** that drives the editor's Source Con
 - Commit batching (50 paths per git invocation) with scoped commits, so partial submits only include the selected files and large submits stay under platform command-line limits.
 - Revert discards both staged and worktree changes and restores files deleted on disk.
 - Merge-conflict details (`base`/`remote` file and revision) exposed to the editor's resolve tooling.
-- Git LFS lock integration: lock/unlock/force-unlock from the Content Browser asset context menu, cached lock state, auto-lock on checkout, configurable refresh interval.
+- Git LFS integration: check-out acquires the LFS lock and makes the asset writable; submit and revert release it. Locks held by other users surface as "checked out by" state and icons.
 - Branch ahead/behind reporting and repo-root discovery (with optional override).
 - In-editor settings panel: git executable picker with automatic discovery of common installs, repository/branch/remote/user status, and a "Initialize project with Git" wizard (`.gitignore`, `README.md`, LFS `.gitattributes`, initial commit).
 - History metadata: revision numbers, per-revision actions (add/delete/rename), and file sizes.
@@ -50,8 +50,7 @@ User-level (`Edit > Editor Preferences > Plugins > UnrealGit (User)`):
 
 | Setting | Description |
 | --- | --- |
-| Git Executable Override | Override the `git` binary path (empty = `PATH` lookup). |
-| Auto Lock On Checkout | Automatically lock LFS files when checking them out. |
+| Git Executable Override | Override the `git` binary path (empty = auto-detect, falling back to `PATH`). |
 
 ## Development
 

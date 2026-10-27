@@ -4,6 +4,7 @@
 
 #include "Async/Async.h"
 #include "HAL/FileManager.h"
+#include "HAL/PlatformFileManager.h"
 #include "ISourceControlOperation.h"
 #include "ISourceControlModule.h"
 #include "Misc/Paths.h"
@@ -24,11 +25,9 @@
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitCheckOutWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitGetHistoryWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
-#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitLockWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitMarkForAddWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitRevertWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitSyncWorker.h"
-#include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitUnlockWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitUpdateStatusWorker.h"
 #include "UnrealGit/Private/UnrealGit/SourceControl/Workers/GitWorkerUtils.h"
 #include "UnrealGit/SourceControl/UnrealGitSourceControlState.h"
@@ -39,6 +38,20 @@
 #include "Styling/AppStyle.h"
 #include "Widgets/SNullWidget.h"
 #endif // SOURCE_CONTROL_WITH_SLATE
+
+static void ApplyLocalReadOnlyState(const FString& AbsoluteFilename, bool bShouldBeReadOnly)
+{
+	IPlatformFile& PlatformFile = FPlatformFileManager::Get().GetPlatformFile();
+	if (!PlatformFile.FileExists(*AbsoluteFilename))
+	{
+		return;
+	}
+
+	if (PlatformFile.IsReadOnly(*AbsoluteFilename) != bShouldBeReadOnly)
+	{
+		PlatformFile.SetReadOnly(*AbsoluteFilename, bShouldBeReadOnly);
+	}
+}
 
 static FString FindRepositoryRootPath(const FString& StartDirectory)
 {
@@ -126,6 +139,7 @@ void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
 	// Filesystem-only repository detection so IsEnabled() is meaningful before any worker runs.
 	RepoRoot = FindRepositoryRootPath(GetWorkingDirectoryHint());
 	bRepositoryFound = !RepoRoot.IsEmpty();
+	NextPeriodicRefreshUtc = FDateTime(0);
 
 	const FString SessionDir = FPaths::ConvertRelativePathToFull(FPaths::Combine(FPaths::DiffDir(), TEXT("UnrealGit"), FGuid::NewGuid().ToString(EGuidFormats::Digits)));
 	RevisionMaterializer = MakeShared<FGitRevisionMaterializer, ESPMode::ThreadSafe>(SessionDir);
@@ -144,6 +158,8 @@ void FUnrealGitSourceControlProvider::Init(bool bForceConnection)
 				EnvironmentInfo = Info;
 			}
 			bGitAvailable = Info.bGitAvailable;
+			Settings.UserName = Info.UserName;
+			Settings.UserEmail = Info.UserEmail;
 			UE_LOG(LogSourceControl, Log, TEXT("UnrealGit: Environment: GitAvailable=%s GitVersion=\"%s\" LfsAvailable=%s LfsVersion=\"%s\" User=\"%s\" Email=\"%s\""),
 				Info.bGitAvailable ? TEXT("true") : TEXT("false"),
 				*Info.GitVersion,
@@ -234,11 +250,12 @@ FText FUnrealGitSourceControlProvider::GetStatusText() const
 		const FString UserEmail = LocalEnv.UserEmail.IsEmpty() ? FString(TEXT("unknown")) : LocalEnv.UserEmail;
 
 		return FText::FromString(FString::Printf(
-			TEXT("Local repository: %s / Remote origin: %s / Branch: %s / User: %s / E-mail: %s / git %s, lfs %s"),
-			*RepoRoot, *RemoteUrl, *BranchName, *UserName, *UserEmail, *LocalEnv.GitVersion, *LocalEnv.GitLfsVersion));
+			TEXT("Local repository: %s / Remote origin: %s / Branch: %s / User: %s / E-mail: %s / git %s, lfs %s / LFS locks: %d"),
+			*RepoRoot, *RemoteUrl, *BranchName, *UserName, *UserEmail, *LocalEnv.GitVersion, *LocalEnv.GitLfsVersion,
+			bHasCachedLfsLocks ? CachedLfsLocks.Num() : 0));
 	}
 
-	return FText::FromString(FString::Printf(TEXT("Local repository: %s"), *RepoRoot));
+	return FText::FromString(FString::Printf(TEXT("Local repository: %s / LFS locks: %d"), *RepoRoot, bHasCachedLfsLocks ? CachedLfsLocks.Num() : 0));
 }
 
 bool FUnrealGitSourceControlProvider::IsEnabled() const
@@ -340,10 +357,12 @@ ECommandResult::Type FUnrealGitSourceControlProvider::GetState(const TArray<FStr
 		bUpdateInProgress = Commands.Num() > 0;
 	}
 
-	if ((InStateCacheUsage == EStateCacheUsage::ForceUpdate || bAnyInvalid) && !bUpdateInProgress && !RepoRoot.IsEmpty())
+	if ((InStateCacheUsage == EStateCacheUsage::ForceUpdate || bAnyInvalid) && !bUpdateInProgress)
 	{
+		// A full-repo status in one command beats trickling one request per asset.
+		const bool bFullRepoSweep = (InStateCacheUsage != EStateCacheUsage::ForceUpdate);
 		const FSourceControlOperationRef UpdateOp = ISourceControlOperation::Create<FUpdateStatus>();
-		Execute(UpdateOp, nullptr, AbsFiles, EConcurrency::Asynchronous, FSourceControlOperationComplete());
+		Execute(UpdateOp, nullptr, bFullRepoSweep ? TArray<FString>() : AbsFiles, EConcurrency::Asynchronous, FSourceControlOperationComplete());
 	}
 
 	return ECommandResult::Succeeded;
@@ -551,14 +570,6 @@ ECommandResult::Type FUnrealGitSourceControlProvider::Execute(
 	{
 		Worker = MakeUnique<FGitGetHistoryWorker>();
 	}
-	else if (OpName == "Lock")
-	{
-		Worker = MakeUnique<FGitLockWorker>();
-	}
-	else if (OpName == "Unlock")
-	{
-		Worker = MakeUnique<FGitUnlockWorker>();
-	}
 
 	if (!Worker)
 	{
@@ -644,9 +655,7 @@ bool FUnrealGitSourceControlProvider::CanExecuteOperation(const FSourceControlOp
 		|| OpName == "Revert"
 		|| OpName == "CheckIn"
 		|| OpName == "Sync"
-		|| OpName == "GetHistory"
-		|| OpName == "Lock"
-		|| OpName == "Unlock";
+		|| OpName == "GetHistory";
 }
 
 bool FUnrealGitSourceControlProvider::CanCancelOperation(const FSourceControlOperationRef& /*InOperation*/) const
@@ -810,6 +819,7 @@ void FUnrealGitSourceControlProvider::RefreshRepositoryState()
 	RepoRoot = FindRepositoryRootPath(GetWorkingDirectoryHint());
 	bRepositoryFound = !RepoRoot.IsEmpty();
 	NextLfsLocksRefreshUtc = FDateTime(0);
+	NextPeriodicRefreshUtc = FDateTime(0);
 
 	StartEnvironmentValidation();
 	if (EnvironmentFuture.IsValid())
@@ -823,6 +833,8 @@ void FUnrealGitSourceControlProvider::RefreshRepositoryState()
 				EnvironmentInfo = Info;
 			}
 			bGitAvailable = Info.bGitAvailable;
+			Settings.UserName = Info.UserName;
+			Settings.UserEmail = Info.UserEmail;
 		}
 		else
 		{
@@ -926,8 +938,6 @@ bool FUnrealGitSourceControlProvider::InitializeRepository(const FString& Origin
 
 void FUnrealGitSourceControlProvider::UpdateStatesFromStatusSnapshot(const FGitStatusSnapshot& Snapshot, const TArray<FString>& RequestedFiles)
 {
-	UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatesFromStatusSnapshot: Snapshot has %d files, RequestedFiles has %d"), Snapshot.Files.Num(), RequestedFiles.Num());
-
 	TSet<FString> RequestedSet;
 	for (const FString& File : RequestedFiles)
 	{
@@ -939,7 +949,18 @@ void FUnrealGitSourceControlProvider::UpdateStatesFromStatusSnapshot(const FGitS
 		const FString Abs = FPaths::ConvertRelativePathToFull(RepoRoot / FileStatus.RelativePath);
 		FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
 		StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->UpdateFromStatus(FileStatus);
-		UE_LOG(LogUnrealGit, VeryVerbose, TEXT("UpdateStatesFromStatusSnapshot: Updated state for '%s' to state %d"), *Abs, (int32)FileStatus.State);
+
+		if (StateRef->IsSourceControlled())
+		{
+			// Perforce-style local read-only state for assets: clean, unlocked content files are
+			// read-only so the editor prompts for checkout before editing; checking out (or
+			// locking) makes them writable. Non-content files are left untouched.
+			const bool bIsContentFile = FileStatus.RelativePath.StartsWith(TEXT("Content/"), ESearchCase::IgnoreCase);
+			if (bIsContentFile)
+			{
+				ApplyLocalReadOnlyState(Abs, !StateRef->IsCheckedOut() && !StateRef->IsConflicted());
+			}
+		}
 	}
 
 	// Ensure explicitly requested files have state objects even if not returned by the status snapshot.
@@ -947,6 +968,10 @@ void FUnrealGitSourceControlProvider::UpdateStatesFromStatusSnapshot(const FGitS
 	{
 		GetOrCreateStateInternal(Requested);
 	}
+
+	UE_LOG(LogUnrealGit, Verbose, TEXT("UpdateStatesFromStatusSnapshot: refreshed %d file state(s) (requested %d)"),
+		Snapshot.Files.Num(),
+		RequestedFiles.Num());
 }
 
 void FUnrealGitSourceControlProvider::ApplyLfsLocksToStates(const TOptional<FGitStatusSnapshot>& Snapshot, const TArray<FGitLfsLock>& Locks)
@@ -1054,6 +1079,33 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 		}
 	}
 
+	if (Output.bSuccess && OperationName == TEXT("CheckOut"))
+	{
+		for (const FString& File : Files)
+		{
+			const FString Abs = FPaths::ConvertRelativePathToFull(File);
+			const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
+			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetCheckedOut(true);
+			bAnyStateChanged = true;
+		}
+	}
+	else if (Output.bSuccess && (OperationName == TEXT("CheckIn") || OperationName == TEXT("Revert") || OperationName == TEXT("Delete")))
+	{
+		for (const FString& File : Files)
+		{
+			const FString Abs = FPaths::ConvertRelativePathToFull(File);
+			const FSourceControlStateRef StateRef = GetOrCreateStateInternal(Abs);
+			StaticCastSharedRef<FUnrealGitSourceControlState>(StateRef)->SetCheckedOut(false);
+			bAnyStateChanged = true;
+		}
+	}
+
+	if (Output.bSuccess && (OperationName == TEXT("CheckOut") || OperationName == TEXT("CheckIn") || OperationName == TEXT("Revert")))
+	{
+		// Checkout/checkin change LFS lock ownership, so refresh locks with the next status query.
+		NextLfsLocksRefreshUtc = FDateTime(0);
+	}
+
 	if (Output.bSuccess && Output.bHasLfsLocks)
 	{
 		CachedLfsLocks = Output.LfsLocks;
@@ -1061,7 +1113,7 @@ void FUnrealGitSourceControlProvider::ReconcileWorkerOutput(
 		bAnyStateChanged = true;
 	}
 
-	if (Output.bSuccess && Output.StatusSnapshot.IsSet() && bHasCachedLfsLocks)
+	if (Output.bSuccess && bHasCachedLfsLocks && (Output.bHasLfsLocks || Output.StatusSnapshot.IsSet()))
 	{
 		ApplyLfsLocksToStates(Output.StatusSnapshot, CachedLfsLocks);
 		bAnyStateChanged = true;
@@ -1138,6 +1190,24 @@ void FUnrealGitSourceControlProvider::Tick()
 			*Info.UserName,
 			*Info.UserEmail);
 		EnvironmentFuture = TFuture<FGitEnvironmentInfo>();
+	}
+
+	const FDateTime NowUtc = FDateTime::UtcNow();
+	if (bRepositoryFound && NowUtc >= NextPeriodicRefreshUtc)
+	{
+		bool bCommandsIdle = false;
+		{
+			FScopeLock Lock(&CommandLock);
+			bCommandsIdle = Commands.Num() == 0;
+		}
+
+		if (bCommandsIdle)
+		{
+			// Periodically push status (and lock ownership) so the editor's SCC UI reflects
+			// changes even when it does not explicitly request a refresh.
+			NextPeriodicRefreshUtc = NowUtc + FTimespan::FromSeconds(30);
+			Execute(ISourceControlOperation::Create<FUpdateStatus>(), nullptr, TArray<FString>(), EConcurrency::Asynchronous, FSourceControlOperationComplete());
+		}
 	}
 
 	TArray<TSharedRef<FCommand, ESPMode::ThreadSafe>> Completed;

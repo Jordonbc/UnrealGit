@@ -125,7 +125,6 @@ bool FUnrealGitSettingsResolver::Build(FUnrealGitProviderSettings& OutSettings, 
 	OutSettings.bAutoPushAfterSubmit = Project ? Project->bAutoPushAfterSubmit : false;
 	OutSettings.bEnableLfsLocks = Project ? Project->bEnableLfsLocks : true;
 	OutSettings.LfsLocksRefreshIntervalSeconds = Project ? Project->LfsLocksRefreshIntervalSeconds : 15;
-	OutSettings.bAutoLockOnCheckout = User ? User->bAutoLockOnCheckout : false;
 
 	FText Error;
 	if (!ValidateFileOrEmpty(OutSettings.GitExecutable, Error))

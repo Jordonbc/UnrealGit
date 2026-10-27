@@ -30,6 +30,11 @@ void FUnrealGitSourceControlState::SetLockState(EGitLockState InLockState, FStri
 	LockOwner = MoveTemp(InLockOwner);
 }
 
+void FUnrealGitSourceControlState::SetCheckedOut(bool bInCheckedOut)
+{
+	bIsCheckedOutByMe = bInCheckedOut;
+}
+
 void FUnrealGitSourceControlState::SetHistory(const TArray<TSharedRef<ISourceControlRevision, ESPMode::ThreadSafe>>& InHistory)
 {
 	History = InHistory;
@@ -102,6 +107,11 @@ FSlateIcon FUnrealGitSourceControlState::GetIcon() const
 		return FSlateIcon(StyleSet, "Plastic.Conflicted");
 	}
 
+	if (LockState == EGitLockState::LockedByOther)
+	{
+		return FSlateIcon(StyleSet, "Perforce.CheckedOutByOtherUser");
+	}
+
 	if (FileState == EGitFileState::Added)
 	{
 		return FSlateIcon(StyleSet, "Perforce.OpenForAdd");
@@ -127,6 +137,11 @@ FSlateIcon FUnrealGitSourceControlState::GetIcon() const
 		return FSlateIcon(StyleSet, "Plastic.Ignored");
 	}
 
+	if (LockState == EGitLockState::LockedByMe)
+	{
+		return FSlateIcon(StyleSet, "Perforce.CheckedOut");
+	}
+
 	if (FileState == EGitFileState::Unchanged)
 	{
 		return FSlateIcon();
@@ -143,27 +158,56 @@ FText FUnrealGitSourceControlState::GetDisplayName() const
 
 FText FUnrealGitSourceControlState::GetDisplayTooltip() const
 {
+	FText StateText;
 	switch (FileState)
 	{
 	case EGitFileState::Added:
-		return FText::FromString(TEXT("Added"));
+		StateText = FText::FromString(TEXT("Added"));
+		break;
 	case EGitFileState::Modified:
-		return FText::FromString(TEXT("Modified"));
+		StateText = FText::FromString(TEXT("Modified"));
+		break;
 	case EGitFileState::Deleted:
-		return FText::FromString(TEXT("Deleted"));
+		StateText = FText::FromString(TEXT("Deleted"));
+		break;
 	case EGitFileState::Renamed:
-		return FText::FromString(TEXT("Renamed"));
+		StateText = FText::FromString(TEXT("Renamed"));
+		break;
 	case EGitFileState::Conflicted:
-		return FText::FromString(TEXT("Conflicted"));
+		StateText = FText::FromString(TEXT("Conflicted"));
+		break;
 	case EGitFileState::Untracked:
-		return FText::FromString(TEXT("Untracked"));
+		StateText = FText::FromString(TEXT("Untracked"));
+		break;
 	case EGitFileState::Ignored:
-		return FText::FromString(TEXT("Ignored"));
+		StateText = FText::FromString(TEXT("Ignored"));
+		break;
 	case EGitFileState::Unchanged:
-		return FText::FromString(TEXT("Unchanged"));
+		StateText = FText::FromString(TEXT("Unchanged"));
+		break;
 	default:
-		return FText::FromString(TEXT("Unknown"));
+		StateText = FText::FromString(TEXT("Unknown"));
+		break;
 	}
+
+	switch (LockState)
+	{
+	case EGitLockState::LockedByMe:
+		return FText::Format(INVTEXT("{0}\nChecked out by you"), StateText);
+	case EGitLockState::LockedByOther:
+		return LockOwner.IsEmpty()
+			? FText::Format(INVTEXT("{0}\nChecked out by another user"), StateText)
+			: FText::Format(INVTEXT("{0}\nChecked out by {1}"), StateText, FText::FromString(LockOwner));
+	default:
+		break;
+	}
+
+	if (bIsCheckedOutByMe && FileState == EGitFileState::Unchanged)
+	{
+		return FText::FromString(TEXT("Checked Out"));
+	}
+
+	return StateText;
 }
 
 const FString& FUnrealGitSourceControlState::GetFilename() const
@@ -183,12 +227,15 @@ bool FUnrealGitSourceControlState::CanCheckIn() const
 
 bool FUnrealGitSourceControlState::CanCheckout() const
 {
-	return bIsTracked && LockState != EGitLockState::LockedByOther;
+	return bIsTracked && !IsCheckedOut() && LockState != EGitLockState::LockedByOther;
 }
 
 bool FUnrealGitSourceControlState::IsCheckedOut() const
 {
-	return bIsStaged || bIsUnstaged;
+	// Checked out means the user accepted a checkout for this file in this session,
+	// holds an LFS lock on it, or the file has local changes. Clean tracked files are
+	// NOT checked out, so the editor still prompts for checkout when they are edited.
+	return bIsCheckedOutByMe || bIsStaged || bIsUnstaged || LockState == EGitLockState::LockedByMe;
 }
 
 bool FUnrealGitSourceControlState::IsCheckedOutOther(FString* Who) const
@@ -292,4 +339,45 @@ bool FUnrealGitSourceControlState::IsConflicted() const
 bool FUnrealGitSourceControlState::CanRevert() const
 {
 	return IsModified() || IsAdded() || IsDeleted() || IsConflicted();
+}
+
+TOptional<FText> FUnrealGitSourceControlState::GetStatusText() const
+{
+	if (LockState == EGitLockState::LockedByOther)
+	{
+		return LockOwner.IsEmpty()
+			? FText::FromString(TEXT("Checked out by another user"))
+			: FText::Format(INVTEXT("Checked out by {0}"), FText::FromString(LockOwner));
+	}
+
+	if (IsConflicted())
+	{
+		return FText::FromString(TEXT("Conflicted"));
+	}
+	if (IsAdded())
+	{
+		return FText::FromString(TEXT("Added"));
+	}
+	if (IsDeleted())
+	{
+		return FText::FromString(TEXT("Deleted"));
+	}
+	if (bIsCheckedOutByMe || LockState == EGitLockState::LockedByMe)
+	{
+		return FText::FromString(TEXT("Checked Out"));
+	}
+	if (IsModified())
+	{
+		return FText::FromString(TEXT("Modified"));
+	}
+	if (FileState == EGitFileState::Renamed)
+	{
+		return FText::FromString(TEXT("Renamed"));
+	}
+	if (FileState == EGitFileState::Untracked)
+	{
+		return FText::FromString(TEXT("Untracked"));
+	}
+
+	return TOptional<FText>();
 }
