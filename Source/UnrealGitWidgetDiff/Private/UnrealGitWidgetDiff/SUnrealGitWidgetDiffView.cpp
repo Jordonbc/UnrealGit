@@ -26,6 +26,7 @@
 #include "Widgets/Layout/SBorder.h"
 #include "Widgets/Layout/SBox.h"
 #include "Widgets/Layout/SScrollBox.h"
+#include "Widgets/Layout/SScrollBar.h"
 #include "Widgets/Layout/SSeparator.h"
 #include "Widgets/Layout/SSpacer.h"
 #include "Widgets/Layout/SSplitter.h"
@@ -769,8 +770,15 @@ void SUnrealGitWidgetDiffView::CreateDetailsViews()
 	DetailsArgs.NameAreaSettings = FDetailsViewArgs::HideNameArea;
 	DetailsArgs.DefaultsOnlyVisibility = EEditDefaultsOnlyNodeVisibility::Hide;
 
-	LeftDetailsView = PropertyEditorModule.CreateDetailView(DetailsArgs);
-	RightDetailsView = PropertyEditorModule.CreateDetailView(DetailsArgs);
+	LeftDetailsScrollBar = SNew(SScrollBar);
+	RightDetailsScrollBar = SNew(SScrollBar);
+
+	FDetailsViewArgs LeftArgs = DetailsArgs;
+	LeftArgs.ExternalScrollbar = LeftDetailsScrollBar;
+	FDetailsViewArgs RightArgs = DetailsArgs;
+	RightArgs.ExternalScrollbar = RightDetailsScrollBar;
+	LeftDetailsView = PropertyEditorModule.CreateDetailView(LeftArgs);
+	RightDetailsView = PropertyEditorModule.CreateDetailView(RightArgs);
 
 	const FIsPropertyEditingEnabled ReadOnlyEditing = FIsPropertyEditingEnabled::CreateLambda([]()
 	{
@@ -907,6 +915,9 @@ void SUnrealGitWidgetDiffView::RefreshDetailsViews(const FUnrealGitWidgetNode* N
 	{
 		RightDetailsView->SetObject(RightWidget);
 	}
+
+	LastLeftScrollOffset = -1.0f;
+	LastRightScrollOffset = -1.0f;
 }
 
 FText SUnrealGitWidgetDiffView::GetInspectorHeaderText() const
@@ -952,6 +963,34 @@ void SUnrealGitWidgetDiffView::Tick(const FGeometry& AllottedGeometry, const dou
 	if (LeftCanvas.IsValid()) LeftCanvas->TickPendingFocus();
 	if (RightCanvas.IsValid()) RightCanvas->TickPendingFocus();
 	if (DiffCanvas.IsValid()) DiffCanvas->TickPendingFocus();
+
+	if (LeftDetailsScrollBar.IsValid() && RightDetailsScrollBar.IsValid() && !bSyncingDetailsScroll)
+	{
+		const float LeftOffset = LeftDetailsScrollBar->DistanceFromTop();
+		const float RightOffset = RightDetailsScrollBar->DistanceFromTop();
+		const bool bLeftMoved = !FMath::IsNearlyEqual(LeftOffset, LastLeftScrollOffset, 0.001f);
+		const bool bRightMoved = !FMath::IsNearlyEqual(RightOffset, LastRightScrollOffset, 0.001f);
+
+		if (bLeftMoved && !FMath::IsNearlyEqual(LeftOffset, RightOffset, 0.001f))
+		{
+			bSyncingDetailsScroll = true;
+			RightDetailsScrollBar->SetState(LeftOffset, RightDetailsScrollBar->ThumbSizeFraction(), true);
+			LastLeftScrollOffset = LeftOffset;
+			LastRightScrollOffset = LeftOffset;
+			bSyncingDetailsScroll = false;
+		}
+		else if (bRightMoved && !FMath::IsNearlyEqual(LeftOffset, RightOffset, 0.001f))
+		{
+			bSyncingDetailsScroll = true;
+			LeftDetailsScrollBar->SetState(RightOffset, LeftDetailsScrollBar->ThumbSizeFraction(), true);
+			LastLeftScrollOffset = RightOffset;
+			LastRightScrollOffset = RightOffset;
+			bSyncingDetailsScroll = false;
+		}
+
+		LastLeftScrollOffset = LeftDetailsScrollBar->DistanceFromTop();
+		LastRightScrollOffset = RightDetailsScrollBar->DistanceFromTop();
+	}
 }
 
 void SUnrealGitWidgetDiffView::OnHierarchyRowClicked(TSharedPtr<FUnrealGitWidgetNode> Item)

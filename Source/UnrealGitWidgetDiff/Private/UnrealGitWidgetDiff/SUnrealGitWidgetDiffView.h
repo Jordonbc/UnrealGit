@@ -136,6 +136,14 @@ private:
 	/** Native read-only details views for the historical and current revisions. */
 	TSharedPtr<IDetailsView> LeftDetailsView;
 	TSharedPtr<IDetailsView> RightDetailsView;
+	/** External scrollbars used to keep both details panels in sync. */
+	TSharedPtr<class SScrollBar> LeftDetailsScrollBar;
+	TSharedPtr<class SScrollBar> RightDetailsScrollBar;
+	/** Last observed scroll offsets, used to detect which panel moved. */
+	float LastLeftScrollOffset = -1.0f;
+	float LastRightScrollOffset = -1.0f;
+	/** Guards the mirroring write-back from re-entering. */
+	bool bSyncingDetailsScroll = false;
 	/** Top-level property names that should be boxed in the details views. */
 	TSharedPtr<TSet<FName>> DetailsChangedRoots;
 	/** Widget classes currently customised on each details view. */
