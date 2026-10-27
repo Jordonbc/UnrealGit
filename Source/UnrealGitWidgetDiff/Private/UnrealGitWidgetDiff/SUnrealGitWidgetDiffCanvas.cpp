@@ -138,7 +138,6 @@ void SUnrealGitWidgetDiffCanvas::Construct(const FArguments& InArgs)
 	HighlightNodes = InArgs._HighlightNodes;
 	bUseLeftGeometry = InArgs._UseLeftGeometry;
 	bUseBothGeometries = InArgs._UseBothGeometries;
-	SelectedNode = InArgs._SelectedNode;
 	PreviewContent = InArgs._PreviewContent;
 	DesignSize = InArgs._DesignSize;
 	OnWidgetPicked = InArgs._OnWidgetPicked;
@@ -295,7 +294,8 @@ void SUnrealGitWidgetDiffCanvas::CollectLiveGeometry(
 	OutRects.Reset();
 	LiveRectCache.Reset();
 
-	if (!PreviewWidget || !PreviewWidget->WidgetTree || !PreviewContent.IsValid() ||
+	UUserWidget* LiveWidget = PreviewWidget.Get();
+	if (!LiveWidget || !LiveWidget->WidgetTree || !PreviewContent.IsValid() ||
 		!FMath::IsFinite(EffectiveZoom) || EffectiveZoom <= 0.0f ||
 		DesignSize.X <= 0.0f || DesignSize.Y <= 0.0f)
 	{
@@ -317,7 +317,7 @@ void SUnrealGitWidgetDiffCanvas::CollectLiveGeometry(
 	}
 
 	TArray<UWidget*> Widgets;
-	PreviewWidget->WidgetTree->GetAllWidgets(Widgets);
+	LiveWidget->WidgetTree->GetAllWidgets(Widgets);
 	OutRects.Reserve(Widgets.Num());
 
 	for (UWidget* Widget : Widgets)
@@ -599,7 +599,7 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 		DrawChangeRect(NodePosition, NodeSize, GetChangeColor(Node.Change), Node.Change);
 	};
 
-	const bool bUseLiveGeometry = PreviewWidget != nullptr;
+	const bool bUseLiveGeometry = PreviewWidget.IsValid();
 	for (const FUnrealGitWidgetNode& Node : *HighlightNodes)
 	{
 		if (Node.Change == EUnrealGitWidgetChange::Unchanged)
@@ -643,7 +643,7 @@ void SUnrealGitWidgetDiffCanvas::PaintOverlays(
 		DrawStoredGeometry(Node, bUseLeftGeometry);
 	}
 
-	const FString Selected = SelectedNode.Get();
+	const FString& Selected = GetState().SelectedNodeName;
 	if (!Selected.IsEmpty())
 	{
 		for (const FUnrealGitWidgetNode& Node : *HighlightNodes)
@@ -789,7 +789,7 @@ FReply SUnrealGitWidgetDiffCanvas::OnMouseButtonUp(const FGeometry& MyGeometry, 
 			for (const FUnrealGitWidgetNode& Node : *HighlightNodes)
 			{
 				bool bHit = false;
-				if (PreviewWidget)
+				if (PreviewWidget.IsValid())
 				{
 					// Designer space: pick against the live geometry captured during paint.
 					if (const FBox2D* LiveRect = LiveRectCache.Find(Node.Name))

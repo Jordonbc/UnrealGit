@@ -63,11 +63,6 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 	PreviewModeOptions.Add(MakeShared<FString>(TEXT("Custom 800x600")));
 	CurrentPreviewModeOption = PreviewModeOptions[0];
 
-	if (Session.IsValid())
-	{
-		OnUpdatedHandle = Session->OnUpdated.AddRaw(this, &SUnrealGitWidgetDiffView::OnSessionUpdated);
-	}
-
 	ChildSlot
 	[
 		SNew(SBorder)
@@ -245,7 +240,6 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 								.TransformState(CanvasState)
 								.HighlightNodes(CanvasNodes)
 								.UseLeftGeometry(true)
-								.SelectedNode_Lambda([this]() { return SelectedNodeName; })
 								.OnWidgetPicked_Lambda([this](const FString& Name) { SelectWidgetByName(Name); }) ]
 						]
 						+ SHorizontalBox::Slot().AutoWidth()
@@ -269,7 +263,6 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 								.TransformState(CanvasState)
 								.HighlightNodes(CanvasNodes)
 								.UseLeftGeometry(false)
-								.SelectedNode_Lambda([this]() { return SelectedNodeName; })
 								.OnWidgetPicked_Lambda([this](const FString& Name) { SelectWidgetByName(Name); }) ]
 						]
 					]
@@ -282,7 +275,6 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 						.TransformState(CanvasState)
 						.HighlightNodes(CanvasNodes)
 						.UseBothGeometries(true)
-						.SelectedNode_Lambda([this]() { return SelectedNodeName; })
 						.OnWidgetPicked_Lambda([this](const FString& Name) { SelectWidgetByName(Name); }) ]
 
 					+ SWidgetSwitcher::Slot()
@@ -338,7 +330,11 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 	RebuildHierarchy();
 	if (Session.IsValid())
 	{
-		OnUpdatedHandle = Session->OnUpdated.AddRaw(this, &SUnrealGitWidgetDiffView::OnSessionUpdated);
+		// Weak binding: a late session broadcast after this view is destroyed is
+		// skipped instead of calling into freed memory.
+		OnUpdatedHandle = Session->OnUpdated.AddSP(
+			StaticCastSharedRef<SUnrealGitWidgetDiffView>(SharedThis(this)),
+			&SUnrealGitWidgetDiffView::OnSessionUpdated);
 	}
 }
 
@@ -644,7 +640,10 @@ void SUnrealGitWidgetDiffView::RebuildDiffEntries()
 
 void SUnrealGitWidgetDiffView::OnHierarchySelectionChanged(TSharedPtr<FUnrealGitWidgetNode> Item, ESelectInfo::Type /*SelectInfo*/)
 {
-	SelectedNodeName = Item.IsValid() ? Item->Name : FString();
+	if (CanvasState.IsValid())
+	{
+		CanvasState->SelectedNodeName = Item.IsValid() ? Item->Name : FString();
+	}
 	if (LeftCanvas.IsValid()) LeftCanvas->Invalidate(EInvalidateWidget::Paint);
 	if (RightCanvas.IsValid()) RightCanvas->Invalidate(EInvalidateWidget::Paint);
 	if (DiffCanvas.IsValid()) DiffCanvas->Invalidate(EInvalidateWidget::Paint);

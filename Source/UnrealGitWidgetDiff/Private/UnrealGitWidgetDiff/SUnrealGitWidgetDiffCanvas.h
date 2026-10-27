@@ -13,6 +13,8 @@ struct FUnrealGitWidgetDiffCanvasState
 {
 	float Zoom = 1.0f;
 	FVector2D Pan = FVector2D::ZeroVector;
+	/** Name of the selected hierarchy node, shared so canvases never capture the view. */
+	FString SelectedNodeName;
 };
 
 /**
@@ -40,7 +42,6 @@ public:
 		SLATE_ARGUMENT(bool, UseLeftGeometry)
 		/** Difference mode: draw both revisions' captured geometry. */
 		SLATE_ARGUMENT(bool, UseBothGeometries)
-		SLATE_ATTRIBUTE(FString, SelectedNode)
 		SLATE_ARGUMENT(TSharedPtr<SWidget>, PreviewContent)
 		SLATE_ARGUMENT(FVector2D, DesignSize)
 		SLATE_EVENT(FOnWidgetPicked, OnWidgetPicked)
@@ -79,14 +80,13 @@ private:
 	TSharedPtr<TArray<FUnrealGitWidgetNode>> HighlightNodes;
 	bool bUseLeftGeometry = true;
 	bool bUseBothGeometries = false;
-	TAttribute<FString> SelectedNode;
 
 	TSharedPtr<SWidget> PreviewContent;
 	TSharedPtr<class SZoomPan> PreviewZoomPan;
 	TSharedPtr<class SBox> PreviewBox;
 	FVector2D DesignSize = FVector2D::ZeroVector;
 	/** Live widget whose Slate hierarchy is on screen; geometry source for Designer-space outlines. */
-	UUserWidget* PreviewWidget = nullptr;
+	TWeakObjectPtr<UUserWidget> PreviewWidget;
 	/** Last live geometry captured during paint, used for click picking in Designer space. */
 	mutable TMap<FString, FBox2D> LiveRectCache;
 
