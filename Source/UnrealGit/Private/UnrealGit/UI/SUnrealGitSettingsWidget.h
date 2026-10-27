@@ -1,3 +1,5 @@
+// Copyright (C) 2026 Jordon Brooks. All Rights Reserved.
+
 #pragma once
 
 #include "Widgets/SCompoundWidget.h"
