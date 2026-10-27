@@ -4,7 +4,7 @@ Unreal Engine 5.8 editor plugin (C++) providing a Source Control provider that s
 
 ## Repo layout
 
-- `UnrealGit.uplugin` — plugin descriptor; modules `UnrealGit` (Editor) and `UnrealGitTests` (DeveloperTool).
+- `UnrealVCS.uplugin` — plugin descriptor; modules `UnrealGit` (Editor) and `UnrealGitTests` (DeveloperTool).
 - `Source/UnrealGit/` — implementation; `Public/UnrealGit/` headers, `Private/UnrealGit/` impl.
 - `Source/UnrealGitTests/` — Unreal Automation tests; mocks in `Private/Mocks/`.
 - `Engine/` — full UE 5.8.4 checkout used as the host toolchain; **gitignored**, do not commit or edit.
