@@ -113,6 +113,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 		0,
 		Request.WorkingDirectory.IsEmpty() ? nullptr : *Request.WorkingDirectory,
 		StdOutWritePipe,
+		nullptr,
 		StdErrWritePipe);
 
 	if (!Handle.IsValid())
@@ -186,6 +187,7 @@ FGitProcessResult FSystemGitProcessRunner::Run(const FGitProcessRequest& Request
 			&ProcessId, 0,
 			Request.WorkingDirectory.IsEmpty() ? nullptr : *Request.WorkingDirectory,
 			StdOutWritePipe,
+			nullptr,
 			StdErrWritePipe);
 		
 		if (Handle.IsValid())
