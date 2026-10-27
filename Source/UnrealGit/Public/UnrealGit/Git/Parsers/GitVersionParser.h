@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 
 /**
+ * @class FGitVersionParser
  * Parses `git --version` and `git lfs version` output.
  *
  * This parser is deterministic and side-effect free.
@@ -14,11 +15,19 @@ class FGitVersionParser final
 public:
 	/**
 	 * Parses `git --version` stdout (e.g. "git version 2.44.0").
+	 *
+	 * @param StdOutText Raw stdout text.
+	 * @param OutVersionText Parsed version text on success.
+	 * @return True on success, false otherwise.
 	 */
 	static bool ParseGitVersion(const FString& StdOutText, FString& OutVersionText);
 
 	/**
 	 * Parses `git lfs version` stdout (e.g. "git-lfs/3.4.1 (GitHub; ...)" or "git-lfs/3.4.1").
+	 *
+	 * @param StdOutText Raw stdout text.
+	 * @param OutVersionText Parsed version text on success.
+	 * @return True on success, false otherwise.
 	 */
 	static bool ParseGitLfsVersion(const FString& StdOutText, FString& OutVersionText);
 };

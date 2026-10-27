@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 
 /**
+ * @struct FUnrealGitProviderSettings
  * Validated configuration snapshot used by the UnrealGit provider at runtime.
  *
  * Responsibility:

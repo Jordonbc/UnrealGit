@@ -13,6 +13,7 @@ class FUnrealGitSourceControlState;
 class FGitRevisionMaterializer;
 
 /**
+ * @class FUnrealGitSourceControlProvider
  * Unreal Source Control provider backed by the system Git CLI and Git LFS locks.
  *
  * Responsibility:
@@ -74,30 +75,54 @@ public:
 	virtual TSharedRef<class SWidget> MakeSettingsWidget() const override;
 #endif // SOURCE_CONTROL_WITH_SLATE
 
-	// ---------------------------------------------------------------------
 	// Settings widget support
-	// ---------------------------------------------------------------------
 
-	/** Resolved git executable (user override or detected install). */
+	/**
+	 * Resolved git executable (user override or detected install).
+	 *
+	 * @return Path to the git executable in use.
+	 */
 	FString GetGitExecutablePath() const;
 
-	/** Snapshot copy of the last environment validation result. */
+	/**
+	 * Snapshot copy of the last environment validation result.
+	 *
+	 * @return Copy of the cached environment info.
+	 */
 	FGitEnvironmentInfo GetEnvironmentInfo() const;
 
-	/** Absolute repository root, or an empty string when no repository was found. */
+	/**
+	 * Absolute repository root, or an empty string when no repository was found.
+	 *
+	 * @return Repository root path.
+	 */
 	FString GetRepositoryRoot() const;
 
 	FString GetBranchName() const;
 	FString GetRemoteUrl() const;
 	FText GetLastError() const;
 
-	/** True when git itself was found and validated. */
+	/**
+	 * True when git itself was found and validated.
+	 *
+	 * @return True when git is available.
+	 */
 	bool IsGitToolAvailable() const;
 
-	/** True when a .git directory/file was found at or above the repository discovery directory. */
+	/**
+	 * True when a .git directory/file was found at or above the repository discovery directory.
+	 *
+	 * @return True when a repository was found.
+	 */
 	bool HasGitRepository() const;
 
-	/** Persists the git executable override to user settings and reinitializes discovery. */
+	/**
+	 * Persists the git executable override to user settings and reinitializes discovery.
+	 *
+	 * @param InExecutablePath Path to the git executable to use.
+	 * @param OutError Error text on failure.
+	 * @return True on success, false otherwise.
+	 */
 	bool SetGitExecutableOverride(const FString& InExecutablePath, FText& OutError);
 
 	/**
@@ -105,13 +130,24 @@ public:
 	 *
 	 * Blocking: runs git on a worker thread internally. Call from the game thread
 	 * (the settings widget does), not from another worker.
+	 *
+	 * @param OriginUrl Remote origin URL to configure.
+	 * @param bWriteGitIgnore Whether to write a .gitignore file.
+	 * @param bWriteReadme Whether to write a README file.
+	 * @param bWriteGitAttributes Whether to write a .gitattributes file.
+	 * @param bCreateInitialCommit Whether to create an initial commit.
+	 * @param OutError Error text on failure.
+	 * @return True on success, false otherwise.
 	 */
 	bool InitializeRepository(const FString& OriginUrl, bool bWriteGitIgnore, bool bWriteReadme, bool bWriteGitAttributes, bool bCreateInitialCommit, FText& OutError);
 
-	/** Prints provider/state diagnostics at Warning level (visible with the current log category settings). */
+	/**
+	 * Prints provider/state diagnostics at Warning level (visible with the current log category settings).
+	 */
 	void LogDiagnostics();
 
 private:
+	/** @struct FCommand Internal queued command entry. */
 	struct FCommand;
 
 	void RefreshRepositoryState();

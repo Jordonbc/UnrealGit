@@ -7,6 +7,7 @@
 #include "UnrealGitUserSettings.generated.h"
 
 /**
+ * @class UUnrealGitUserSettings
  * User-level configuration for the UnrealGit Source Control provider.
  *
  * Responsibility:

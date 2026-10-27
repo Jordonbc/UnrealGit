@@ -7,6 +7,7 @@
 #include "UnrealGitProjectSettings.generated.h"
 
 /**
+ * @class UUnrealGitProjectSettings
  * Project-level configuration for the UnrealGit Source Control provider.
  *
  * Responsibility:
