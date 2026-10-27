@@ -5,10 +5,6 @@
 #include "UnrealGit/SourceControl/UnrealGitSourceControlProvider.h"
 #include "UnrealGit/Git/GitEnvironmentInfo.h"
 
-#include "Misc/App.h"
-#include "Misc/Paths.h"
-#include "Misc/FileHelper.h"
-
 #include "DesktopPlatformModule.h"
 
 #include "Widgets/SBoxPanel.h"
@@ -292,26 +288,6 @@ FReply SUnrealGitSettingsWidget::OnInitialize()
 	bInitializing = true;
 
 	const FString OriginUrl = OriginBox.IsValid() ? OriginBox->GetText().ToString() : FString();
-
-	const FString ProjectDir = FPaths::ProjectDir();
-
-	if (bCreateGitIgnore)
-	{
-		const FString GitIgnoreContent = TEXT("Binaries/\nDerivedDataCache/\nIntermediate/\nSaved/\n.vs/\n*.VC.db\n*.opensdf\n*.opendb\n*.sdf\n*.sln\n*.suo\n*.xcodeproj/\n*.xcworkspace/\n");
-		FFileHelper::SaveStringToFile(GitIgnoreContent, *FPaths::Combine(ProjectDir, TEXT(".gitignore")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
-	}
-
-	if (bCreateReadme)
-	{
-		const FString ReadmeContent = FString::Printf(TEXT("# %s\n\nDeveloped with Unreal Engine 5\n"), FApp::GetProjectName());
-		FFileHelper::SaveStringToFile(ReadmeContent, *FPaths::Combine(ProjectDir, TEXT("README.md")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
-	}
-
-	if (bCreateGitAttributes)
-	{
-		const FString GitAttributesContent = TEXT("Content/** filter=lfs diff=lfs merge=lfs -text\n");
-		FFileHelper::SaveStringToFile(GitAttributesContent, *FPaths::Combine(ProjectDir, TEXT(".gitattributes")), FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM);
-	}
 
 	FText OutError;
 	const bool bSuccess = Provider->InitializeRepository(OriginUrl, bCreateGitIgnore, bCreateReadme, bCreateGitAttributes, bCreateInitialCommit, OutError);

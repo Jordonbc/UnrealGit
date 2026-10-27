@@ -23,6 +23,11 @@ namespace UnrealGit::Workers
 		const TSharedPtr<IGitProcessRunner, ESPMode::ThreadSafe>& ProcessRunner,
 		const FString& RepoRoot)
 	{
+		if (!ProcessRunner.IsValid())
+		{
+			return false;
+		}
+
 		const FString IndexPath = FPaths::Combine(RepoRoot, TEXT(".git"), TEXT("index"));
 		if (!IFileManager::Get().FileExists(*IndexPath))
 		{

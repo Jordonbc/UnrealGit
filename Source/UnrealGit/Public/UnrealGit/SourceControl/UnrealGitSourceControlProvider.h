@@ -143,9 +143,9 @@ public:
 	 * (the settings widget does), not from another worker.
 	 *
 	 * @param OriginUrl Remote origin URL to configure.
-	 * @param bWriteGitIgnore Reserved; currently ignored (only OriginUrl and bCreateInitialCommit are used).
-	 * @param bWriteReadme Reserved; currently ignored (only OriginUrl and bCreateInitialCommit are used).
-	 * @param bWriteGitAttributes Reserved; currently ignored (only OriginUrl and bCreateInitialCommit are used).
+	 * @param bWriteGitIgnore Write a standard Unreal .gitignore before the initial commit.
+	 * @param bWriteReadme Write a project README.md before the initial commit.
+	 * @param bWriteGitAttributes Write a Git LFS .gitattributes before the initial commit.
 	 * @param bCreateInitialCommit Whether to create an initial commit.
 	 * @param OutError Error text on failure.
 	 * @return True on success, false otherwise.

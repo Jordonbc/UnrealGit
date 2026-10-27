@@ -7,6 +7,8 @@
 #include "HAL/PlatformFileManager.h"
 #include "ISourceControlModule.h"
 #include "ISourceControlOperation.h"
+#include "Misc/App.h"
+#include "Misc/FileHelper.h"
 #include "Misc/Paths.h"
 #include "SourceControlOperations.h"
 
@@ -898,7 +900,7 @@ void FUnrealGitSourceControlProvider::RefreshRepositoryState()
 	}
 }
 
-bool FUnrealGitSourceControlProvider::InitializeRepository(const FString& OriginUrl, bool /*bWriteGitIgnore*/, bool /*bWriteReadme*/, bool /*bWriteGitAttributes*/, bool bCreateInitialCommit, FText& OutError)
+bool FUnrealGitSourceControlProvider::InitializeRepository(const FString& OriginUrl, bool bWriteGitIgnore, bool bWriteReadme, bool bWriteGitAttributes, bool bCreateInitialCommit, FText& OutError)
 {
 	OutError = FText::GetEmpty();
 
@@ -912,7 +914,7 @@ bool FUnrealGitSourceControlProvider::InitializeRepository(const FString& Origin
 	const FString WorkingDir = GetWorkingDirectoryHint();
 	const FString TrimmedOriginUrl = OriginUrl.TrimStartAndEnd();
 
-	TFuture<FString> Future = Async(EAsyncExecution::ThreadPool, [Runner, WorkingDir, TrimmedOriginUrl, bCreateInitialCommit]()
+	TFuture<FString> Future = Async(EAsyncExecution::ThreadPool, [Runner, WorkingDir, TrimmedOriginUrl, bCreateInitialCommit, bWriteGitIgnore, bWriteReadme, bWriteGitAttributes]()
 	{
 		auto RunGit = [&Runner, &WorkingDir](const TArray<FString>& Arguments) -> FGitProcessResult
 		{
@@ -930,10 +932,50 @@ bool FUnrealGitSourceControlProvider::InitializeRepository(const FString& Origin
 				: StdErr;
 		};
 
+		auto WriteScaffoldingFile = [&WorkingDir](const FString& Filename, const FString& Content) -> FString
+		{
+			const FString Path = FPaths::Combine(WorkingDir, Filename);
+			if (!FFileHelper::SaveStringToFile(Content, *Path, FFileHelper::EEncodingOptions::ForceUTF8WithoutBOM))
+			{
+				return FString::Printf(TEXT("Failed to write %s."), *Path);
+			}
+			return FString();
+		};
+
 		const FGitProcessResult InitResult = RunGit({ TEXT("init") });
 		if (InitResult.ExitCode != 0)
 		{
 			return ToError(InitResult);
+		}
+
+		if (bWriteGitIgnore)
+		{
+			const FString GitIgnoreContent = TEXT("Binaries/\nDerivedDataCache/\nIntermediate/\nSaved/\n.vs/\n*.VC.db\n*.opensdf\n*.opendb\n*.sdf\n*.sln\n*.suo\n*.xcodeproj/\n*.xcworkspace/\n");
+			const FString WriteError = WriteScaffoldingFile(TEXT(".gitignore"), GitIgnoreContent);
+			if (!WriteError.IsEmpty())
+			{
+				return WriteError;
+			}
+		}
+
+		if (bWriteReadme)
+		{
+			const FString ReadmeContent = FString::Printf(TEXT("# %s\n\nDeveloped with Unreal Engine 5\n"), FApp::GetProjectName());
+			const FString WriteError = WriteScaffoldingFile(TEXT("README.md"), ReadmeContent);
+			if (!WriteError.IsEmpty())
+			{
+				return WriteError;
+			}
+		}
+
+		if (bWriteGitAttributes)
+		{
+			const FString GitAttributesContent = TEXT("Content/** filter=lfs diff=lfs merge=lfs -text\n");
+			const FString WriteError = WriteScaffoldingFile(TEXT(".gitattributes"), GitAttributesContent);
+			if (!WriteError.IsEmpty())
+			{
+				return WriteError;
+			}
 		}
 
 		if (!TrimmedOriginUrl.IsEmpty())
