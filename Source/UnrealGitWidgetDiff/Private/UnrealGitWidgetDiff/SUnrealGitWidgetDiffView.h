@@ -60,7 +60,6 @@ private:
 
 	bool bFitToWindow = true;
 	bool bSwapped = false;
-	bool bShowPixelOverlay = false;
 	float OnionBlendPercent = 50.0f;
 
 	FDelegateHandle OnUpdatedHandle;
@@ -87,7 +86,6 @@ private:
 
 	FText GetLeftLabel() const;
 	FText GetRightLabel() const;
-	FText GetSummaryText() const;
 
 	TSharedPtr<STreeView<TSharedPtr<FUnrealGitWidgetNode>>> HierarchyList;
 	TArray<TSharedPtr<FUnrealGitWidgetNode>> HierarchyItems;

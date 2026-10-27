@@ -136,18 +136,6 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 			]
 			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f)
 			[
-				SNew(SCheckBox)
-				.IsChecked_Lambda([this]() { return bShowPixelOverlay ? ECheckBoxState::Checked : ECheckBoxState::Unchecked; })
-				.OnCheckStateChanged_Lambda([this](ECheckBoxState State)
-				{
-					bShowPixelOverlay = (State == ECheckBoxState::Checked);
-					if (LeftCanvas.IsValid()) LeftCanvas->Invalidate(EInvalidateWidget::Paint);
-					if (RightCanvas.IsValid()) RightCanvas->Invalidate(EInvalidateWidget::Paint);
-				})
-				[ SNew(STextBlock).Text(LOCTEXT("PixelDiff", "Pixel Diff")) ]
-			]
-			+ SHorizontalBox::Slot().AutoWidth().VAlign(VAlign_Center).Padding(4.0f, 0.0f)
-			[
 				SNew(SButton).OnClicked(this, &SUnrealGitWidgetDiffView::OnSwapClicked)
 				[ SNew(SImage).Image(FAppStyle::GetBrush(TEXT("Icons.SortUpDown"))) ]
 			]
@@ -252,7 +240,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 							[ SAssignNew(LeftCanvas, SUnrealGitWidgetDiffCanvas)
 								.BaseBrush(this, &SUnrealGitWidgetDiffView::GetLeftBrush)
 								.OverlayBrush(this, &SUnrealGitWidgetDiffView::GetHighlightBrush)
-								.ShowOverlay_Lambda([this]() { return bShowPixelOverlay; })
+								.ShowOverlay(false)
 								.FitToWindow_Lambda([this]() { return bFitToWindow; })
 								.TransformState(CanvasState)
 								.HighlightNodes(CanvasNodes)
@@ -275,7 +263,7 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 							[ SAssignNew(RightCanvas, SUnrealGitWidgetDiffCanvas)
 								.BaseBrush(this, &SUnrealGitWidgetDiffView::GetRightBrush)
 								.OverlayBrush(this, &SUnrealGitWidgetDiffView::GetHighlightBrush)
-								.ShowOverlay_Lambda([this]() { return bShowPixelOverlay; })
+								.ShowOverlay(false)
 								.FitToWindow_Lambda([this]() { return bFitToWindow; })
 								.TransformState(CanvasState)
 								.HighlightNodes(CanvasNodes)
@@ -336,16 +324,6 @@ void SUnrealGitWidgetDiffView::Construct(const FArguments& InArgs)
 			]
 		]
 
-		+ SVerticalBox::Slot().AutoHeight().Padding(4.0f)
-		[
-			SNew(SBorder).Padding(4.0f)
-			[
-				SNew(SHorizontalBox)
-				+ SHorizontalBox::Slot().FillWidth(1.0f)[ SNew(STextBlock).Text_Lambda([this]() { return GetLeftLabel(); }) ]
-				+ SHorizontalBox::Slot().FillWidth(1.0f)[ SNew(STextBlock).Text_Lambda([this]() { return GetRightLabel(); }) ]
-				+ SHorizontalBox::Slot().FillWidth(1.0f)[ SNew(STextBlock).Text_Lambda([this]() { return GetSummaryText(); }) ]
-			]
-		]
 		]
 	];
 
@@ -811,24 +789,6 @@ FText SUnrealGitWidgetDiffView::GetRightLabel() const
 	if (Session.IsValid())
 	{
 		return bSwapped ? Session->Result.Left.Label : Session->Result.Right.Label;
-	}
-	return FText::GetEmpty();
-}
-
-FText SUnrealGitWidgetDiffView::GetSummaryText() const
-{
-	if (Session.IsValid())
-	{
-		const FUnrealGitWidgetDiffResult& R = Session->Result;
-		if (R.DiffPixelCount == 0)
-		{
-			return LOCTEXT("NoDiff", "No visual differences detected.");
-		}
-		return FText::Format(LOCTEXT("Summary", "Diff pixels: {0} ({1}) Canvas: {2}x{3}"),
-			FText::AsNumber(R.DiffPixelCount),
-			FText::AsPercent(R.DiffRatio),
-			FText::AsNumber(R.CanvasSize.X),
-			FText::AsNumber(R.CanvasSize.Y));
 	}
 	return FText::GetEmpty();
 }
