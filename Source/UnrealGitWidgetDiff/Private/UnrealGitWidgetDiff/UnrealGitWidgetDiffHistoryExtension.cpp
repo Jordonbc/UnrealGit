@@ -154,7 +154,7 @@ static void PopulateHistoryMenu(UToolMenu* InMenu)
 
 void FUnrealGitWidgetDiffHistoryExtension::Register()
 {
-	UToolMenus* ToolMenus = UToolMenus::Get();
+	UToolMenus* ToolMenus = UToolMenus::TryGet();
 	if (!ToolMenus)
 	{
 		return;
@@ -172,7 +172,7 @@ void FUnrealGitWidgetDiffHistoryExtension::Register()
 
 void FUnrealGitWidgetDiffHistoryExtension::Unregister()
 {
-	UToolMenus* ToolMenus = UToolMenus::Get();
+	UToolMenus* ToolMenus = UToolMenus::TryGet();
 	if (!ToolMenus)
 	{
 		return;
