@@ -10,7 +10,7 @@
 
 namespace
 {
-	void CollectWidgets(UWidget* Widget, int32 Depth, int32 ParentIndex, TArray<FUnrealGitWidgetNode>& OutNodes, TArray<UWidget*>& OutWidgets)
+	void CollectWidgets(UWidget* Widget, UWidget* Parent, int32 Depth, TArray<FUnrealGitWidgetNode>& OutNodes, TArray<UWidget*>& OutWidgets)
 	{
 		if (!Widget)
 		{
@@ -19,9 +19,10 @@ namespace
 
 		FUnrealGitWidgetNode Node;
 		Node.Name = Widget->GetName();
+		Node.ParentName = Parent ? Parent->GetName() : FString();
 		Node.TypeName = Widget->GetClass()->GetName();
 		Node.Depth = Depth;
-		Node.ParentIndex = ParentIndex;
+		Node.ParentIndex = INDEX_NONE;
 
 		const int32 Index = OutNodes.Add(Node);
 		OutWidgets.Add(Widget);
@@ -30,7 +31,7 @@ namespace
 		{
 			for (int32 ChildIndex = 0; ChildIndex < Panel->GetChildrenCount(); ++ChildIndex)
 			{
-				CollectWidgets(Panel->GetChildAt(ChildIndex), Depth + 1, Index, OutNodes, OutWidgets);
+				CollectWidgets(Panel->GetChildAt(ChildIndex), Widget, Depth + 1, OutNodes, OutWidgets);
 			}
 		}
 	}
@@ -41,7 +42,7 @@ namespace
 		{
 			return;
 		}
-		CollectWidgets(Blueprint->WidgetTree->RootWidget, 0, INDEX_NONE, OutNodes, OutWidgets);
+		CollectWidgets(Blueprint->WidgetTree->RootWidget, nullptr, 0, OutNodes, OutWidgets);
 	}
 }
 

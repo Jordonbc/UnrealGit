@@ -3,10 +3,12 @@
 #include "UnrealGitWidgetDiff/Private/UnrealGitWidgetDiff/UnrealGitWidgetDiffRenderer.h"
 
 #include "Blueprint/UserWidget.h"
+#include "Blueprint/WidgetTree.h"
+#include "Components/PanelWidget.h"
+#include "Components/Widget.h"
 #include "Editor.h"
 #include "Engine/TextureRenderTarget2D.h"
 #include "ImageUtils.h"
-#include "Misc/ConfigCacheIni.h"
 #include "Slate/WidgetRenderer.h"
 #include "UnrealGitWidgetDiff/UnrealGitWidgetDiffTypes.h"
 #include "WidgetBlueprint.h"
@@ -15,9 +17,37 @@
 
 #define LOCTEXT_NAMESPACE "UnrealGitWidgetDiffRenderer"
 
-bool FUnrealGitWidgetDiffRenderer::Render(UWidgetBlueprint* Blueprint, EThumbnailPreviewSizeMode Mode, FImage& OutImage, FText& OutError)
+namespace
+{
+	void CollectWidgetGeometry(UWidget* Widget, const float Scale, const FVector2D& Offset, TMap<FString, FBox2D>& OutRects)
+	{
+		if (!Widget)
+		{
+			return;
+		}
+
+		const FGeometry& Geometry = Widget->GetCachedGeometry();
+		const FVector2D LocalSize = Geometry.GetLocalSize();
+		if (LocalSize.X > 0.0f && LocalSize.Y > 0.0f)
+		{
+			const FVector2D Position = Geometry.GetAbsolutePosition() * Scale + Offset;
+			OutRects.Add(Widget->GetName(), FBox2D(Position, Position + LocalSize * Scale));
+		}
+
+		if (UPanelWidget* Panel = Cast<UPanelWidget>(Widget))
+		{
+			for (int32 ChildIndex = 0; ChildIndex < Panel->GetChildrenCount(); ++ChildIndex)
+			{
+				CollectWidgetGeometry(Panel->GetChildAt(ChildIndex), Scale, Offset, OutRects);
+			}
+		}
+	}
+}
+
+bool FUnrealGitWidgetDiffRenderer::Render(UWidgetBlueprint* Blueprint, EThumbnailPreviewSizeMode Mode, FImage& OutImage, TMap<FString, FBox2D>& OutWidgetRects, FText& OutError)
 {
 	OutImage = FImage();
+	OutWidgetRects.Reset();
 	OutError = FText::GetEmpty();
 
 	if (!Blueprint)
@@ -52,82 +82,61 @@ bool FUnrealGitWidgetDiffRenderer::Render(UWidgetBlueprint* Blueprint, EThumbnai
 		return false;
 	}
 
-	TSharedPtr<SWidget> SlateWidget = WidgetInstance->TakeWidget();
-	if (!SlateWidget.IsValid())
-	{
-		OutError = LOCTEXT("NoSlateWidget", "Widget produced no Slate content.");
-		return false;
-	}
-
-	TSharedRef<SVirtualWindow> Window = SNew(SVirtualWindow);
-	TUniquePtr<FHittestGrid> HitTestGrid = MakeUnique<FHittestGrid>();
-	Window->SetContent(SlateWidget.ToSharedRef());
-	Window->Resize(FVector2D(256.f, 256.f));
-	Window->SlatePrepass(1.0f);
-	const FVector2D DesiredSize = Window->GetDesiredSize();
-
-	if (DesiredSize.X < SMALL_NUMBER || DesiredSize.Y < SMALL_NUMBER)
-	{
-		OutError = LOCTEXT("ZeroSize", "Widget has zero size.");
-		return false;
-	}
-
-	TOptional<FVector2D> CustomSize;
-	if (Mode == EThumbnailPreviewSizeMode::Custom)
-	{
-		CustomSize = FVector2D(800.0f, 600.0f);
-	}
-	const FVector2D UnscaledSize = FWidgetBlueprintEditorUtils::GetWidgetPreviewUnScaledCustomSize(
-		DesiredSize,
-		WidgetInstance,
-		CustomSize,
-		Mode);
-
-	if (UnscaledSize.X < SMALL_NUMBER || UnscaledSize.Y < SMALL_NUMBER)
-	{
-		OutError = LOCTEXT("ZeroUnscaled", "Widget has no preview size.");
-		return false;
-	}
-
-	const int32 CanvasW = FMath::CeilToInt(UnscaledSize.X);
-	const int32 CanvasH = FMath::CeilToInt(UnscaledSize.Y);
-
+	// Let the engine's designer-preview code size and render the widget exactly
+	// as the UMG designer thumbnail does (design size mode, DPI, gamma, clipping).
+	const FVector2D ThumbnailSize(1024.0f, 1024.0f);
 	UTextureRenderTarget2D* RenderTarget = NewObject<UTextureRenderTarget2D>(GetTransientPackage());
-	RenderTarget->Filter = TF_Bilinear;
-	RenderTarget->ClearColor = FLinearColor::Transparent;
-	RenderTarget->SRGB = true;
-	RenderTarget->RenderTargetFormat = RTF_RGBA8;
-	RenderTarget->InitCustomFormat(CanvasW, CanvasH, PF_B8G8R8A8, false);
-	RenderTarget->UpdateResourceImmediate(true);
 
-	Window->Resize(UnscaledSize);
+	TOptional<FWidgetBlueprintEditorUtils::FWidgetThumbnailProperties> Properties =
+		FWidgetBlueprintEditorUtils::DrawSWidgetInRenderTargetForThumbnail(
+			WidgetInstance,
+			RenderTarget,
+			ThumbnailSize,
+			TOptional<FVector2D>(),
+			Mode);
 
-	FWidgetRenderer* WidgetRenderer = new FWidgetRenderer(true);
-	WidgetRenderer->SetIsPrepassNeeded(false);
-	WidgetRenderer->SetShouldClearTarget(true);
-	WidgetRenderer->ViewOffset = FVector2D::ZeroVector;
-
-	WidgetRenderer->DrawWindow(
-		RenderTarget,
-		*HitTestGrid,
-		Window,
-		1.0f,
-		UnscaledSize,
-		0.0f);
+	if (!Properties.IsSet())
+	{
+		OutError = LOCTEXT("RenderFailed", "Widget produced no preview content.");
+		return false;
+	}
 
 	FlushRenderingCommands();
 
-	const bool bReadOk = FImageUtils::GetRenderTargetImage(RenderTarget, OutImage);
-
-	BeginCleanup(WidgetRenderer);
-	WidgetRenderer = nullptr;
-
-	RenderTarget->MarkAsGarbage();
-
-	if (!bReadOk || OutImage.SizeX <= 0 || OutImage.SizeY <= 0)
+	if (!FImageUtils::GetRenderTargetImage(RenderTarget, OutImage) || OutImage.SizeX <= 0 || OutImage.SizeY <= 0)
 	{
 		OutError = LOCTEXT("ReadFailed", "Failed to read rendered widget.");
 		return false;
+	}
+
+	// Collect each widget's preview rectangle so the viewer can draw designer-style
+	// change outlines without a pixel overlay.
+	const FVector2D ScaledSize = Properties->ScaledSize;
+	if (ScaledSize.X > 0.0f)
+	{
+		TSharedPtr<SWidget> SlateWidget = WidgetInstance->TakeWidget();
+		if (SlateWidget.IsValid())
+		{
+			TSharedRef<SVirtualWindow> Window = SNew(SVirtualWindow);
+			Window->SetContent(SlateWidget.ToSharedRef());
+			Window->Resize(ThumbnailSize);
+			Window->SlatePrepass(1.0f);
+
+			const FVector2D UnscaledSize = FWidgetBlueprintEditorUtils::GetWidgetPreviewUnScaledCustomSize(
+				Window->GetDesiredSize(),
+				WidgetInstance,
+				TOptional<FVector2D>(),
+				Mode);
+
+			if (UnscaledSize.X > 0.0f)
+			{
+				const float Scale = ScaledSize.X / UnscaledSize.X;
+				// The render-target path sizes the target to the fitted widget, so
+				// the image origin is (0,0); the returned Offset only applies when
+				// drawing into a larger canvas.
+				CollectWidgetGeometry(Blueprint->WidgetTree ? Blueprint->WidgetTree->RootWidget : nullptr, Scale, FVector2D::ZeroVector, OutWidgetRects);
+			}
+		}
 	}
 
 	return true;
@@ -165,6 +174,46 @@ FImage FUnrealGitWidgetDiffRenderer::PadToCanvas(const FImage& Src, const FIntPo
 	}
 
 	return Out;
+}
+
+bool FUnrealGitWidgetDiffRenderer::MakeHighlight(const FImage& A, const FImage& B, FImage& OutHighlightImage)
+{
+	OutHighlightImage = FImage();
+	if (A.SizeX != B.SizeX || A.SizeY != B.SizeY || A.SizeX <= 0 || A.SizeY <= 0)
+	{
+		return false;
+	}
+
+	const int32 Total = A.SizeX * A.SizeY;
+	TArrayView64<const FColor> PixelsA = A.AsBGRA8();
+	TArrayView64<const FColor> PixelsB = B.AsBGRA8();
+	if (PixelsA.Num() != Total || PixelsB.Num() != Total)
+	{
+		return false;
+	}
+
+	OutHighlightImage.Init(A.SizeX, A.SizeY, ERawImageFormat::BGRA8, EGammaSpace::sRGB);
+	TArrayView64<FColor> Highlight = OutHighlightImage.AsBGRA8();
+	if (Highlight.Num() != Total)
+	{
+		return false;
+	}
+
+	for (int32 i = 0; i < Total; ++i)
+	{
+		const FColor& CA = PixelsA[i];
+		const FColor& CB = PixelsB[i];
+		const int32 Delta = FMath::Max3(
+			FMath::Abs((int32)CA.R - (int32)CB.R),
+			FMath::Abs((int32)CA.G - (int32)CB.G),
+			FMath::Abs((int32)CA.B - (int32)CB.B));
+
+		Highlight[i] = (Delta > 8)
+			? FColor(255, 0, 255, 180)
+			: FColor(0, 0, 0, 0);
+	}
+
+	return true;
 }
 
 bool FUnrealGitWidgetDiffRenderer::ComputeDiff(
@@ -220,7 +269,7 @@ bool FUnrealGitWidgetDiffRenderer::ComputeDiff(
 		if (Delta > Threshold)
 		{
 			++OutDiffPixelCount;
-			DiffPixels[i] = FColor(255, 0, 255, 255); // magenta highlight
+			DiffPixels[i] = FColor(255, 0, 255, 255);
 			const int32 X = i % A.SizeX;
 			const int32 Y = i / A.SizeX;
 			MinX = FMath::Min(MinX, X);
@@ -230,7 +279,6 @@ bool FUnrealGitWidgetDiffRenderer::ComputeDiff(
 		}
 		else
 		{
-			// Dimmed newer image for context.
 			DiffPixels[i] = FColor(
 				(uint8)(CB.R * 0.35f),
 				(uint8)(CB.G * 0.35f),
@@ -239,19 +287,12 @@ bool FUnrealGitWidgetDiffRenderer::ComputeDiff(
 		}
 	}
 
-	// DiffPixels aliases OutDiffImage.RawData, so writes above already landed.
-
 	if (OutDiffPixelCount > 0)
 	{
 		OutDiffBounds = FIntRect(MinX, MinY, MaxX + 1, MaxY + 1);
 	}
-	else
-	{
-		OutDiffBounds = FIntRect(0, 0, 0, 0);
-	}
 
 	OutDiffRatio = (float)OutDiffPixelCount / (float)FMath::Max(1, Total);
-
 	return true;
 }
 

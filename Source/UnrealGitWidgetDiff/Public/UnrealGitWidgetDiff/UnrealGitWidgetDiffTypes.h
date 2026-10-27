@@ -37,6 +37,7 @@ enum class EUnrealGitWidgetChange : uint8
 struct FUnrealGitWidgetNode
 {
 	FString Name;
+	FString ParentName;
 	FString TypeName;
 	int32 Depth = 0;
 	int32 ParentIndex = INDEX_NONE;
@@ -46,6 +47,11 @@ struct FUnrealGitWidgetNode
 	int32 LeftIndex = INDEX_NONE;
 	/** Index into the flattened pre-order array of the right tree, or INDEX_NONE if removed. */
 	int32 RightIndex = INDEX_NONE;
+
+	/** Widget rectangle in the rendered canvas (left/old revision). */
+	FVector2D Position = FVector2D::ZeroVector;
+	FVector2D Size = FVector2D::ZeroVector;
+	bool bHasGeometry = false;
 };
 
 /**
@@ -72,6 +78,10 @@ struct FUnrealGitWidgetDiffResult
 	FImage DiffImage;
 	/** Texture created from DiffImage. */
 	TObjectPtr<class UTexture2D> DiffTexture = nullptr;
+
+	/** Transparent image with only the changed pixels highlighted. */
+	FImage HighlightImage;
+	TObjectPtr<class UTexture2D> HighlightTexture = nullptr;
 
 	/** Flattened pre-order widget hierarchy with change markers. */
 	TArray<FUnrealGitWidgetNode> Hierarchy;

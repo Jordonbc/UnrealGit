@@ -5,6 +5,7 @@
 #include "CoreMinimal.h"
 #include "Widgets/SCompoundWidget.h"
 #include "Widgets/Views/SListView.h"
+#include "Widgets/Views/STreeView.h"
 #include "UnrealGitWidgetDiff/UnrealGitWidgetDiffSession.h"
 
 class SUnrealGitWidgetDiffView : public SCompoundWidget
@@ -37,9 +38,18 @@ private:
 	FSlateBrush LeftBrush;
 	FSlateBrush RightBrush;
 	FSlateBrush DiffBrush;
+	FSlateBrush HighlightBrush;
+
+	TSharedPtr<class SUnrealGitWidgetDiffCanvas> LeftCanvas;
+	TSharedPtr<class SUnrealGitWidgetDiffCanvas> RightCanvas;
+	TSharedPtr<class SUnrealGitWidgetDiffCanvas> DiffCanvas;
+	TSharedPtr<struct FUnrealGitWidgetDiffCanvasState> CanvasState;
+	TArray<FUnrealGitWidgetNode> CanvasNodes;
+	FString SelectedNodeName;
 
 	bool bFitToWindow = true;
 	bool bSwapped = false;
+	bool bShowPixelOverlay = false;
 	float OnionBlendPercent = 50.0f;
 
 	FDelegateHandle OnUpdatedHandle;
@@ -47,6 +57,7 @@ private:
 	const FSlateBrush* GetLeftBrush() const { return &LeftBrush; }
 	const FSlateBrush* GetRightBrush() const { return &RightBrush; }
 	const FSlateBrush* GetDiffBrush() const { return &DiffBrush; }
+	const FSlateBrush* GetHighlightBrush() const { return &HighlightBrush; }
 
 	bool IsOnionMode() const { return ViewMode == EViewMode::Onion; }
 
@@ -67,10 +78,16 @@ private:
 	FText GetRightLabel() const;
 	FText GetSummaryText() const;
 
-	TSharedPtr<SListView<TSharedPtr<FUnrealGitWidgetNode>>> HierarchyList;
+	TSharedPtr<STreeView<TSharedPtr<FUnrealGitWidgetNode>>> HierarchyList;
 	TArray<TSharedPtr<FUnrealGitWidgetNode>> HierarchyItems;
+	TArray<TSharedPtr<FUnrealGitWidgetNode>> HierarchyRoots;
+
+	void OnGetHierarchyChildren(TSharedPtr<FUnrealGitWidgetNode> Item, TArray<TSharedPtr<FUnrealGitWidgetNode>>& OutChildren) const;
 	TSharedPtr<SListView<TSharedPtr<FString>>> PropertyList;
 	TArray<TSharedPtr<FString>> PropertyItems;
+	TArray<FString> PropertyNodeNames;
+	TSharedPtr<STextBlock> DiffSummaryText;
+	void OnPropertySelectionChanged(TSharedPtr<FString> Item, ESelectInfo::Type SelectInfo);
 
 	void RebuildHierarchy();
 	TSharedRef<ITableRow> OnGenerateHierarchyRow(TSharedPtr<FUnrealGitWidgetNode> Item, const TSharedRef<STableViewBase>& OwnerTable);

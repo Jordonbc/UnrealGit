@@ -22,6 +22,9 @@ public:
 
 	UPROPERTY()
 	TObjectPtr<UTexture2D> DiffTexture = nullptr;
+
+	UPROPERTY()
+	TObjectPtr<UTexture2D> HighlightTexture = nullptr;
 };
 
 enum class EUnrealGitWidgetDiffState : uint8

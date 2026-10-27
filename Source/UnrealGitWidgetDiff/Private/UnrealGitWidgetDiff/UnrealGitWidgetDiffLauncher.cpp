@@ -231,22 +231,39 @@ void FUnrealGitWidgetDiffLauncher::Launch(const FString& AssetFileName, const FS
 				}
 			}
 
-			const TArray<FUnrealGitWidgetNode> Hierarchy = FUnrealGitWidgetDiffHierarchy::Build(LeftBlueprint, RightBlueprint);
+			TArray<FUnrealGitWidgetNode> Hierarchy = FUnrealGitWidgetDiffHierarchy::Build(LeftBlueprint, RightBlueprint);
 
 			FImage LeftImage;
+			TMap<FString, FBox2D> LeftRects;
 			FText RenderError;
-			if (!FUnrealGitWidgetDiffRenderer::Render(LeftBlueprint, Mode, LeftImage, RenderError))
+			if (!FUnrealGitWidgetDiffRenderer::Render(LeftBlueprint, Mode, LeftImage, LeftRects, RenderError))
 			{
 				Session->SetError(FText::Format(LOCTEXT("RenderLeftFailed", "Failed to render left side: {0}"), RenderError));
 				return;
 			}
 
 			FImage RightImage;
+			TMap<FString, FBox2D> RightRects;
 			FText RenderErrorRight;
-			if (!FUnrealGitWidgetDiffRenderer::Render(RightBlueprint, Mode, RightImage, RenderErrorRight))
+			if (!FUnrealGitWidgetDiffRenderer::Render(RightBlueprint, Mode, RightImage, RightRects, RenderErrorRight))
 			{
 				Session->SetError(FText::Format(LOCTEXT("RenderRightFailed", "Failed to render right side: {0}"), RenderErrorRight));
 				return;
+			}
+
+			for (FUnrealGitWidgetNode& Node : Hierarchy)
+			{
+				const FBox2D* Rect = LeftRects.Find(Node.Name);
+				if (!Rect)
+				{
+					Rect = RightRects.Find(Node.Name);
+				}
+				if (Rect)
+				{
+					Node.Position = Rect->Min;
+					Node.Size = Rect->GetSize();
+					Node.bHasGeometry = true;
+				}
 			}
 
 			const FIntPoint CanvasSize(
@@ -274,13 +291,18 @@ void FUnrealGitWidgetDiffLauncher::Launch(const FString& AssetFileName, const FS
 			UUnrealGitWidgetDiffImages* ImagesObj = NewObject<UUnrealGitWidgetDiffImages>(GetTransientPackage());
 			ImagesObj->AddToRoot();
 
+			FImage HighlightImage;
+			FUnrealGitWidgetDiffRenderer::MakeHighlight(PaddedLeft, PaddedRight, HighlightImage);
+
 			UTexture2D* LeftTexture = FImageUtils::CreateTexture2DFromImage(PaddedLeft);
 			UTexture2D* RightTexture = FImageUtils::CreateTexture2DFromImage(PaddedRight);
 			UTexture2D* DiffTexture = FImageUtils::CreateTexture2DFromImage(DiffImage);
+			UTexture2D* HighlightTexture = FImageUtils::CreateTexture2DFromImage(HighlightImage);
 
 			ImagesObj->LeftTexture = LeftTexture;
 			ImagesObj->RightTexture = RightTexture;
 			ImagesObj->DiffTexture = DiffTexture;
+			ImagesObj->HighlightTexture = HighlightTexture;
 
 			FUnrealGitWidgetDiffResult Result;
 			Result.bSuccess = true;
@@ -290,6 +312,8 @@ void FUnrealGitWidgetDiffLauncher::Launch(const FString& AssetFileName, const FS
 			Result.DiffBounds = DiffBounds;
 			Result.DiffImage = DiffImage;
 			Result.DiffTexture = DiffTexture;
+			Result.HighlightImage = HighlightImage;
+			Result.HighlightTexture = HighlightTexture;
 
 			const FString LeftLabelString = LeftRevision.IsEmpty() ? FString(TEXT("Working Copy")) : LeftRevision.Left(8);
 			const FString RightLabelString = RightRevision.IsEmpty() ? FString(TEXT("Working Copy")) : RightRevision.Left(8);
