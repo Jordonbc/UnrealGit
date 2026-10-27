@@ -9,10 +9,10 @@ namespace UnrealGit::HistoryParsing
 	static bool ParseMetadataLine(const TArrayView<const uint8> LineBytes, FGitRevisionInfo& OutInfo)
 	{
 		// Fields: commit, author name, author email, author date, subject
-		const TCHAR FieldSep = 0x001F;
+		const TCHAR FieldSep[] = { (TCHAR)0x001F, TEXT('\0') };
 		const FString Line = UnrealGit::Parsing::Utf8BytesToString(LineBytes.GetData(), LineBytes.Num());
 		TArray<FString> Fields;
-		Line.ParseIntoArray(Fields, &FieldSep, false);
+		Line.ParseIntoArray(Fields, FieldSep, false);
 		if (Fields.Num() < 5)
 		{
 			return false;
