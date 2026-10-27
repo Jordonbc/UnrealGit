@@ -6,6 +6,7 @@
 #include "UnrealGit/Git/GitModels.h"
 
 /**
+ * @class FGitFileHistoryParser
  * Parses `git log --follow --name-status -z` output with RS/US delimiters.
  *
  * This parser is deterministic and side-effect free.
