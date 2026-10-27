@@ -8,9 +8,14 @@ An Unreal Engine **Source Control provider** that drives the editor's Source Con
 
 ## Features
 
-- Status, diff, history, revert, check-out, check-in (commit), sync (pull), and submit workflows wired into Unreal's Source Control menu.
+- Status, diff, history, revert, check-out, check-in (commit), sync (pull), delete, copy/redirector staging, conflict resolve, and submit workflows wired into Unreal's Source Control menu.
+- Commit batching (50 paths per git invocation) with scoped commits, so partial submits only include the selected files and large submits stay under platform command-line limits.
+- Revert discards both staged and worktree changes and restores files deleted on disk.
+- Merge-conflict details (`base`/`remote` file and revision) exposed to the editor's resolve tooling.
 - Git LFS lock integration: lock/unlock, cached lock state, auto-lock on checkout, configurable refresh interval.
 - Branch ahead/behind reporting and repo-root discovery (with optional override).
+- In-editor settings panel: git executable picker with automatic discovery of common installs, repository/branch/remote/user status, and a "Initialize project with Git" wizard (`.gitignore`, `README.md`, LFS `.gitattributes`, initial commit).
+- History metadata: revision numbers, per-revision actions (add/delete/rename), and file sizes.
 - Per-project and per-user settings (pull rebase, auto-push after submit, LFS locks, executable override, repo root override).
 - Deterministic unit tests (Unreal Automation Framework) using mocked git process runners.
 
@@ -28,6 +33,8 @@ An Unreal Engine **Source Control provider** that drives the editor's Source Con
 4. Open **Source Control** settings and select the `UnrealGit` provider, then connect to your repository.
 
 ## Configuration
+
+The Source Control settings panel (Source Control toolbar → gear icon) exposes the git executable picker, live repository/branch/remote/user status, and an "Initialize project with Git" wizard when the project is not yet a repository.
 
 Project-level (`Edit > Project Settings > Plugins > UnrealGit`):
 
