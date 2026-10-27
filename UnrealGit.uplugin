@@ -21,6 +21,11 @@
 			"LoadingPhase": "PostEngineInit"
 		},
 		{
+			"Name": "UnrealGitWidgetDiff",
+			"Type": "Editor",
+			"LoadingPhase": "PostEngineInit"
+		},
+		{
 			"Name": "UnrealGitTests",
 			"Type": "DeveloperTool",
 			"LoadingPhase": "PostEngineInit"
