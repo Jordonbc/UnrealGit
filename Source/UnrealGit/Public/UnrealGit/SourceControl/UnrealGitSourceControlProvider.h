@@ -4,9 +4,9 @@
 
 #include "CoreMinimal.h"
 #include "ISourceControlProvider.h"
-#include "UnrealGit/Settings/UnrealGitProviderSettings.h"
 #include "UnrealGit/Git/GitEnvironmentInfo.h"
 #include "UnrealGit/Git/GitModels.h"
+#include "UnrealGit/Settings/UnrealGitProviderSettings.h"
 
 class IGitProcessRunner;
 class FUnrealGitSourceControlState;
