@@ -23,13 +23,6 @@ All agents must obey following principles.
 ## Build & test
 
 - **Build/compile (required):** `just build` from repo root. Do not invoke UBT/UAT directly for builds.
-- Package plugin (Linux/macOS):
-  `Engine/Build/BatchFiles/RunUAT.sh BuildPlugin -Plugin="$PWD/UnrealGit.uplugin" -Package="$PWD/../UnrealGitPackage"`
-- Package plugin (Windows):
-  `Engine/Build/BatchFiles/RunUAT.bat BuildPlugin -Plugin="<path>/UnrealGit.uplugin" -Package="<out>/UnrealGit" -TargetPlatforms=Win64`
-- Tests need a **host `.uproject`** (none exists in this repo); point the command at one:
-  `Engine/Binaries/Linux/UnrealEditor-Cmd "<HostProject>.uproject" -ExecCmds="Automation RunTests UnrealGit.; Quit" -unattended -nop4 -NullRHI`
-- Single test: replace filter with full name, e.g. `Automation RunTests UnrealGit.Revision.MaterializeBinary`.
 - No CI, lint, or typecheck config in repo; verification is local.
 
 ## Tooling Restrictions
