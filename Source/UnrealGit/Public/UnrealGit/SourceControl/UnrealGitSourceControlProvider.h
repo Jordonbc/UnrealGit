@@ -21,7 +21,10 @@ class FGitRevisionMaterializer;
  * - Maintains a state cache for fast icon/status queries.
  *
  * Threading:
- * - All Git operations run asynchronously on a background thread.
+ * - Process execution is offloaded to a background thread, but synchronous callers
+ *   (Execute with EConcurrency::Synchronous, Init, RefreshRepositoryState) block
+ *   until the spawned future completes (Init/RefreshRepositoryState wait up to
+ *   5 seconds for environment validation).
  * - Provider public API methods are called on the game thread unless noted otherwise.
  */
 class FUnrealGitSourceControlProvider final : public ISourceControlProvider
@@ -98,13 +101,16 @@ public:
 	 */
 	FString GetRepositoryRoot() const;
 
-	/** Current branch name reported by the last status snapshot. */
+	/** Current branch name reported by the last status snapshot.
+	 * @return Current branch name. */
 	FString GetBranchName() const;
 
-	/** Remote origin URL discovered from the repository. */
+	/** Remote origin URL discovered from the repository.
+	 * @return Remote origin URL. */
 	FString GetRemoteUrl() const;
 
-	/** Last error text produced by the provider. */
+	/** Last error text produced by the provider.
+	 * @return Last error text. */
 	FText GetLastError() const;
 
 	/**
@@ -137,9 +143,9 @@ public:
 	 * (the settings widget does), not from another worker.
 	 *
 	 * @param OriginUrl Remote origin URL to configure.
-	 * @param bWriteGitIgnore Whether to write a .gitignore file.
-	 * @param bWriteReadme Whether to write a README file.
-	 * @param bWriteGitAttributes Whether to write a .gitattributes file.
+	 * @param bWriteGitIgnore Reserved; currently ignored (only OriginUrl and bCreateInitialCommit are used).
+	 * @param bWriteReadme Reserved; currently ignored (only OriginUrl and bCreateInitialCommit are used).
+	 * @param bWriteGitAttributes Reserved; currently ignored (only OriginUrl and bCreateInitialCommit are used).
 	 * @param bCreateInitialCommit Whether to create an initial commit.
 	 * @param OutError Error text on failure.
 	 * @return True on success, false otherwise.
@@ -148,6 +154,9 @@ public:
 
 	/**
 	 * Prints provider/state diagnostics at Warning level (visible with the current log category settings).
+	 *
+	 * Mutates state: calls Init(true) when the process runner is not initialized, and
+	 * forces a synchronous status update. May block. Call from the game thread.
 	 */
 	void LogDiagnostics();
 

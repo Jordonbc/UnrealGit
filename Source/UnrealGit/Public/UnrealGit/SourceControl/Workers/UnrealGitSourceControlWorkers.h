@@ -41,7 +41,7 @@ class IGitSourceControlWorker
 public:
 	virtual ~IGitSourceControlWorker() = default;
 
-	/** Returns the operation name identifying this worker. */
+	/** Returns the operation name identifying this worker. @return Operation name. */
 	virtual FName GetName() const = 0;
 
 	/**
