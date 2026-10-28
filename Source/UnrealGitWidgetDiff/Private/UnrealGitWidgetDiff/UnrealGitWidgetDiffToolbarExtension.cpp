@@ -21,14 +21,23 @@ void FUnrealGitWidgetDiffToolbarExtension::Register()
 	auto Extender = [](const TSharedRef<FUICommandList> Cmd, TSharedRef<FWidgetBlueprintEditor> Ed) -> TSharedRef<FExtender>
 	{
 		TSharedRef<FExtender> E = MakeShareable(new FExtender);
+		// This extender is stored on the editor itself (FAssetEditorToolkit::ToolbarExtenders), so a strong
+		// capture of Ed would keep the toolkit alive after its tab closes and leak the asset editor instance.
+		TWeakPtr<FWidgetBlueprintEditor> WeakEd = Ed;
 		// Add a simple toolbar button by extending the "Asset" toolbar section.
 		E->AddToolBarExtension("Asset", EExtensionHook::After, Cmd,
-			FToolBarExtensionDelegate::CreateLambda([Ed](FToolBarBuilder& B)
+			FToolBarExtensionDelegate::CreateLambda([WeakEd](FToolBarBuilder& B)
 			{
 				B.AddToolBarButton(
-					FUIAction(FExecuteAction::CreateLambda([Ed]()
+					FUIAction(FExecuteAction::CreateLambda([WeakEd]()
 					{
-						if (UBlueprint* BP = Ed->GetBlueprintObj())
+						TSharedPtr<FWidgetBlueprintEditor> Editor = WeakEd.Pin();
+						if (!Editor.IsValid())
+						{
+							return;
+						}
+
+						if (UBlueprint* BP = Editor->GetBlueprintObj())
 						{
 							const FString Filename = SourceControlHelpers::PackageFilename(BP->GetPathName());
 							if (!Filename.IsEmpty())
